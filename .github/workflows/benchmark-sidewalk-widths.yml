@@ -12,7 +12,6 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
 
     steps:
       - name: Checkout
