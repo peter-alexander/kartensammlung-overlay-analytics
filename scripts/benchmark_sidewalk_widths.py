@@ -11,13 +11,16 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import requests
+from pyproj import Transformer
 from shapely import LineString, Point, box, line_interpolate_point, make_valid
 from shapely.geometry import GeometryCollection, LineString as GeoLineString
 from shapely.geometry import MultiLineString, MultiPolygon, Polygon, mapping, shape
+from shapely.ops import transform as shapely_transform
 from shapely.prepared import prep
 
 WFS_BASE = "https://data.wien.gv.at/daten/geo"
 EPSG_METRIC = "EPSG:31256"
+EPSG_DEBUG_OUTPUT = "EPSG:4326"
 TIMEOUT = 180
 
 
@@ -188,6 +191,25 @@ def build_output_line(mx: float, my: float, tx: float, ty: float, half_len: floa
 		(mx - tx * half_len, my - ty * half_len),
 		(mx + tx * half_len, my + ty * half_len),
 	])
+
+
+def transform_features_to_4326(
+	features: list[dict[str, Any]],
+	transformer: Transformer,
+) -> list[dict[str, Any]]:
+	out: list[dict[str, Any]] = []
+
+	for feature in features:
+		geom = shape(feature["geometry"])
+		geom_4326 = shapely_transform(transformer.transform, geom)
+
+		out.append({
+			"type": "Feature",
+			"geometry": mapping(geom_4326),
+			"properties": feature["properties"],
+		})
+
+	return out
 
 
 def resolve_aois(session: requests.Session, config: dict[str, Any]) -> list[AoiDef]:
@@ -378,10 +400,12 @@ def main() -> None:
 
 	session = requests.Session()
 	resolved_aois = resolve_aois(session, config)
+	debug_transformer = Transformer.from_crs(EPSG_METRIC, EPSG_DEBUG_OUTPUT, always_xy=True)
 
 	summary: dict[str, Any] = {
 		"created_at_unix": int(time.time()),
 		"epsg_metric": EPSG_METRIC,
+		"debug_output_epsg": EPSG_DEBUG_OUTPUT,
 		"config": config,
 		"runs": [],
 	}
@@ -408,9 +432,14 @@ def main() -> None:
 			features, stats = measure_sidewalks(sidewalk_geoms, aoi, cfg)
 			measure_seconds = round(time.perf_counter() - measure_t0, 3)
 
-			debug_features = features[: cfg.debug_feature_limit]
-			stem = f"{aoi.name}_step-{str(step_m).replace('.', '_')}"
-			write_geojson(out_dir / f"{stem}.geojson", debug_features)
+			debug_features_metric = features[: cfg.debug_feature_limit]
+			debug_features_4326 = transform_features_to_4326(
+				debug_features_metric,
+				debug_transformer,
+			)
+
+			stem = f"{aoi.name}_step-{str(step_m).replace('.', '_')}_epsg4326"
+			write_geojson(out_dir / f"{stem}.geojson", debug_features_4326)
 
 			run_summary = {
 				"aoi": aoi.name,
@@ -418,7 +447,7 @@ def main() -> None:
 				"step_m": step_m,
 				"fetch_seconds": fetch_seconds,
 				"measure_seconds": measure_seconds,
-				"debug_features_written": len(debug_features),
+				"debug_features_written": len(debug_features_4326),
 				"total_features_generated": len(features),
 				"max_rss_kb": max_rss_kb(),
 				"stats": stats,
