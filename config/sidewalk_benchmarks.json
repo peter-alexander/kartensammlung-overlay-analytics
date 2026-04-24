@@ -7,7 +7,7 @@
 	"inner_probe_m": 0.08,
 	"min_width_m": 0.20,
 	"only_outer_rings": true,
-	"debug_feature_limit": 3000,
+	"debug_feature_limit": 15000,
 	"aois": [
 		{
 			"name": "wien_gesamt",
