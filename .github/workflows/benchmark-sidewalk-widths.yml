@@ -1,0 +1,43 @@
+name: Benchmark sidewalk widths
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: Path to benchmark config JSON
+        required: true
+        default: config/sidewalk_benchmarks.json
+        type: string
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run benchmark
+        run: |
+          python scripts/benchmark_sidewalk_widths.py \
+            --config "${{ inputs.config_path }}" \
+            --output "outputs/$(date +%Y-%m-%d_%H-%M-%S)"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidewalk-benchmark
+          path: outputs/
+          if-no-files-found: error
