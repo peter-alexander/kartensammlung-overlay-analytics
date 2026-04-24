@@ -1,0 +1,17 @@
+{
+	"steps_m": [3.0, 2.0, 1.5, 1.0],
+	"span_m": 30.0,
+	"mark_half_m": 1.2,
+	"vertex_margin_m": 0.5,
+	"tangent_window_m": 6.0,
+	"inner_probe_m": 0.08,
+	"min_width_m": 0.20,
+	"only_outer_rings": true,
+	"debug_feature_limit": 3000,
+	"aois": [
+		{
+			"name": "wien_gesamt",
+			"mode": "vienna_boundary"
+		}
+	]
+}
