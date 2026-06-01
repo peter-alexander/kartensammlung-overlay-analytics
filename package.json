@@ -1,0 +1,17 @@
+{
+	"name": "kartensammlung-overlay-analytics",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:sidewalk-widths": "node scripts/run-sidewalk-widths.js",
+		"build:sis-index": "node scripts/build-sis-index.js",
+		"build:pmtiles": "node scripts/build-pmtiles.js"
+	},
+	"dependencies": {
+		"better-sqlite3": "^11.9.1",
+		"stream-chain": "^3.4.0",
+		"stream-json": "^1.9.1"
+	},
+	"devDependencies": {}
+}
