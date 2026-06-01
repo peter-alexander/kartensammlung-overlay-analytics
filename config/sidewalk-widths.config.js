@@ -19,7 +19,7 @@ export default {
 			url: 'https://fahrrad.lima-city.de/testdata/sidewalk-widths/fmzk_gehsteig.geojson'
 
 			// Finale Quelle, vorerst absichtlich deaktiviert:
-			// url: 'Wien WFS: FMZKVERKEHR2OGD, LAYER = Gehsteig, EPSG:31256, outputFormat=json'
+			// url: https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:FMZKVERKEHR2OGD&srsName=EPSG:31256&outputFormat=json
 		},
 		sis: {
 			name: 'SIS Belagsflächen Testausschnitt',
@@ -29,7 +29,7 @@ export default {
 			allowedTypes: ['GG', 'EE', 'HH']
 
 			// Finale Quelle, vorerst absichtlich deaktiviert:
-			// url: 'SIS_BELAG finale Quelle hier einsetzen'
+			// url: https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:SISBELAGOGD&srsName=EPSG:31256&outputFormat=json
 		}
 	},
 	measurement: {
