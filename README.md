@@ -1,24 +1,36 @@
 # kartensammlung-overlay-analytics
 
-Erste Benchmark-Struktur für Gehsteigbreiten.
+Neue JavaScript-Pipeline für Gehsteigbreiten der Kartensammlung.
 
-## Start lokal
+## Methode
+
+Die Pipeline verwendet FMZK-Gehsteigflächen als Richtungs- und Strukturquelle und SIS-Belagsflächen als tatsächliche Messfläche.
+
+- FMZK wird featureweise gelesen und verarbeitet.
+- SIS wird vorher lokal in eine SQLite/RTree-Datei indiziert.
+- Pro FMZK-Feature werden Messstationen entlang des Außenrings erzeugt.
+- Die lokale Gehrichtung wird geglättet und Ausreißer werden korrigiert.
+- Quer zur lokalen Gehrichtung wird in den zugeordneten SIS-Flächen gemessen.
+- Mehrere parallele Gehflächen pro Messstation bleiben erhalten.
+- Benachbarte Messungen gleicher Breitenklasse werden sofort zu Liniensegmenten zusammengefasst.
+- Am Ende wird ein einziges PMTiles-File gebaut.
+
+## Breitenklassen
+
+- `0`: `< 1.2 m`
+- `1`: `1.2 m – 1.5 m`
+- `2`: `1.5 m – 2.0 m`
+- `3`: `2.0 m – 3.0 m`
+- `4`: `> 3.0 m`
+
+## Lokaler Start
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python scripts/benchmark_sidewalk_widths.py --config config/sidewalk_benchmarks.json --output outputs/local-run
+npm ci
+npm run build:sidewalk-widths -- --config config/sidewalk-widths.config.js
 ```
 
-## Ziel der ersten Runde
+## Datenquellen
 
-- Wien-Daten direkt vom WFS holen
-- nur outer rings messen
-- geglättete lokale Richtung verwenden
-- je Messstation genau ein Hauptsegment wählen
-- JSON-Metriken und Debug-GeoJSON schreiben
-
-## Nächster Schritt danach
-
-Wenn die Benchmark-Runde sauber läuft und die Ausgabe optisch passt, kann die Struktur in `src/`-Module aufgeteilt und um `pyogrio` / `GeoPackage` erweitert werden.
+Die finalen URLs sind in `config/sidewalk-widths.config.js` vorbereitet, aber auskommentiert.
+Aktiv sind Test-URLs für kleine vorbereitete Ausschnitte auf Lima-City.
