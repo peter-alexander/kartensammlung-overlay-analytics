@@ -25,7 +25,7 @@ export default {
 			name: 'SIS Belagsflächen Testausschnitt',
 			kind: 'geojson',
 			url: 'https://fahrrad.lima-city.de/Gehsteigbreiten-Testdaten/SISBELAGOGD.json',
-			typeProperty: 'TYP',
+			typeProperty: 'TYPE',
 			allowedTypes: ['GG', 'EE', 'HH']
 
 			// Finale Quelle, vorerst absichtlich deaktiviert:
