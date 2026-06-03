@@ -42,6 +42,8 @@ export async function runSidewalkWidthsPipeline(config) {
 		},
 		sis_index: sisIndexStats,
 		fmzk_features: 0,
+		fmzk_features_filtered_out: 0,
+		fmzk_features_processed: 0,
 		output_features: 0,
 		fmzk_diagnostics: {
 			geometryTypeCounts: {},
@@ -60,6 +62,13 @@ export async function runSidewalkWidthsPipeline(config) {
 		for await (const feature of iterateGeoJsonFeatures(fmzkPath)) {
 			summary.fmzk_features++;
 			collectFmzkDiagnostics(summary.fmzk_diagnostics, feature);
+
+			if (!passesFeatureFilter(feature, config.sources.fmzk.filter)) {
+				summary.fmzk_features_filtered_out++;
+				continue;
+			}
+
+			summary.fmzk_features_processed++;
 			const result = measureFmzkFeature({ feature, sisDb, config });
 
 			for (const outFeature of result.features) {
@@ -72,6 +81,7 @@ export async function runSidewalkWidthsPipeline(config) {
 			if (summary.fmzk_features % 100 === 0) {
 				console.log(JSON.stringify({
 					fmzk_features: summary.fmzk_features,
+					fmzk_features_processed: summary.fmzk_features_processed,
 					output_features: summary.output_features,
 					stations: summary.stats.stations,
 					measurements: summary.stats.measurements
@@ -86,6 +96,13 @@ export async function runSidewalkWidthsPipeline(config) {
 	await fs.promises.writeFile(config.paths.summary, JSON.stringify(summary, null, 2), 'utf8');
 	console.log(JSON.stringify({ done: true, summary }));
 	return summary;
+}
+
+function passesFeatureFilter(feature, filter) {
+	if (!filter) return true;
+	const value = feature.properties?.[filter.property];
+	const allowed = new Set(filter.values || []);
+	return allowed.has(value);
 }
 
 function collectFmzkDiagnostics(target, feature) {
