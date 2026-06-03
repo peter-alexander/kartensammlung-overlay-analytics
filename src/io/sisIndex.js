@@ -47,17 +47,49 @@ export async function buildSisIndex({ sourcePath, dbPath, typeProperty, allowedT
 
 	let read = 0;
 	let indexed = 0;
+	let skippedByType = 0;
+	let skippedNoGeometry = 0;
+	let skippedNoBbox = 0;
 	const allowed = new Set(allowedTypes || []);
+	const typeCounts = new Map();
+	const geometryTypeCounts = new Map();
+	const samplePropertyKeys = new Set();
+
+	const prepared = [];
+	for await (const feature of iterateGeoJsonFeatures(sourcePath)) {
+		read++;
+		const properties = feature.properties || {};
+		const type = String(properties[typeProperty] ?? '').trim();
+		const geomType = feature.geometry?.type || 'null';
+		typeCounts.set(type || '(empty)', (typeCounts.get(type || '(empty)') || 0) + 1);
+		geometryTypeCounts.set(geomType, (geometryTypeCounts.get(geomType) || 0) + 1);
+		for (const key of Object.keys(properties).slice(0, 30)) samplePropertyKeys.add(key);
+		prepared.push({ feature, type });
+	}
+
+	const hasAnyAllowedType = allowed.size === 0 || prepared.some((item) => allowed.has(item.type));
+	const applyTypeFilter = allowed.size > 0 && hasAnyAllowedType;
 
 	const batch = db.transaction((items) => {
-		for (const feature of items) {
+		for (const item of items) {
+			const feature = item.feature;
+			const type = item.type;
 			const properties = feature.properties || {};
-			const type = String(properties[typeProperty] ?? '').trim();
-			if (allowed.size && !allowed.has(type)) continue;
-			if (!feature.geometry) continue;
+
+			if (applyTypeFilter && !allowed.has(type)) {
+				skippedByType++;
+				continue;
+			}
+			if (!feature.geometry) {
+				skippedNoGeometry++;
+				continue;
+			}
 
 			const bbox = bboxOfGeometry(feature.geometry);
-			if (!bbox) continue;
+			if (!bbox) {
+				skippedNoBbox++;
+				continue;
+			}
 
 			const result = insertFeature.run(
 				type,
@@ -73,19 +105,24 @@ export async function buildSisIndex({ sourcePath, dbPath, typeProperty, allowedT
 		}
 	});
 
-	let buffer = [];
-	for await (const feature of iterateGeoJsonFeatures(sourcePath)) {
-		read++;
-		buffer.push(feature);
-		if (buffer.length >= 1000) {
-			batch(buffer);
-			buffer = [];
-		}
+	for (let i = 0; i < prepared.length; i += 1000) {
+		batch(prepared.slice(i, i + 1000));
 	}
-	if (buffer.length) batch(buffer);
 
 	db.close();
-	return { read, indexed };
+	return {
+		read,
+		indexed,
+		skippedByType,
+		skippedNoGeometry,
+		skippedNoBbox,
+		typeProperty,
+		typeFilterApplied: applyTypeFilter,
+		allowedTypes: [...allowed],
+		typeCounts: Object.fromEntries(typeCounts),
+		geometryTypeCounts: Object.fromEntries(geometryTypeCounts),
+		samplePropertyKeys: [...samplePropertyKeys]
+	};
 }
 
 export function querySisIndex(db, bbox) {
