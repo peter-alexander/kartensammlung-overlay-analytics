@@ -1,42 +1,54 @@
-name: Benchmark sidewalk widths
+name: Build sidewalk widths
 
 on:
   workflow_dispatch:
     inputs:
       config_path:
-        description: Path to benchmark config JSON
+        description: Path to JS config
         required: true
-        default: config/sidewalk_benchmarks.json
+        default: config/sidewalk-widths.config.js
         type: string
+      skip_pmtiles:
+        description: Build only GeoJSONSeq, skip PMTiles
+        required: true
+        default: false
+        type: boolean
 
 jobs:
-  benchmark:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          node-version: '22'
+          cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin tippecanoe
 
-      - name: Run benchmark
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Build sidewalk widths
         run: |
-          python scripts/benchmark_sidewalk_widths.py \
-            --config "${{ inputs.config_path }}" \
-            --output "outputs/$(date +%Y-%m-%d_%H-%M-%S)"
+          if [ "${{ inputs.skip_pmtiles }}" = "true" ]; then
+            npm run build:sidewalk-widths -- --config "${{ inputs.config_path }}" --skip-pmtiles
+          else
+            npm run build:sidewalk-widths -- --config "${{ inputs.config_path }}"
+          fi
 
-      - name: Upload artifacts
+      - name: Upload outputs
         uses: actions/upload-artifact@v4
         with:
-          name: sidewalk-benchmark
-          path: outputs/
+          name: sidewalk-widths
+          path: |
+            dist/
+            work/sidewalk-widths/*.geojsonseq
           if-no-files-found: error
