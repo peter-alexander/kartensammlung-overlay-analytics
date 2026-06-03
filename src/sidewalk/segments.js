@@ -1,6 +1,7 @@
+import { dist, lerp } from '../geom/basic.js';
 import { simplifyLine } from '../geom/simplify.js';
 
-export function groupMeasurements({ measurements, config, fmzkProperties }) {
+export function groupMeasurements({ measurements, config, fmzkProperties, connectionValidator = null }) {
 	if (!measurements.length) return [];
 
 	const byBand = new Map();
@@ -17,22 +18,40 @@ export function groupMeasurements({ measurements, config, fmzkProperties }) {
 		let current = null;
 
 		for (const item of items) {
+			const hasInvalidConnection = current && connectionValidator &&
+				!connectionValidator(current.lastPoint, item.point);
+
 			const startsNew = !current ||
 				current.widthClass !== item.widthClass ||
-				item.chainM - current.lastChainM > config.measurement.maxStationGapM;
+				item.chainM - current.lastChainM > config.measurement.maxStationGapM ||
+				hasInvalidConnection;
 
 			if (startsNew) {
-				if (current) features.push(makeFeature(current, config, fmzkProperties));
+				const feature = current ? makeFeature(current, config, fmzkProperties) : null;
+				if (feature) features.push(feature);
 				current = startGroup(item, Number(bandKey));
 			} else {
 				appendGroup(current, item);
 			}
 		}
 
-		if (current) features.push(makeFeature(current, config, fmzkProperties));
+		const feature = current ? makeFeature(current, config, fmzkProperties) : null;
+		if (feature) features.push(feature);
 	}
 
 	return features;
+}
+
+export function linePassesPointValidator(a, b, validator, sampleStepM) {
+	if (!validator(a) || !validator(b)) return false;
+	const length = dist(a, b);
+	if (length <= 1e-9) return true;
+	const steps = Math.max(1, Math.ceil(length / sampleStepM));
+	for (let i = 1; i < steps; i++) {
+		const p = lerp(a, b, i / steps);
+		if (!validator(p)) return false;
+	}
+	return true;
 }
 
 function startGroup(item, bandIndex) {
@@ -40,6 +59,7 @@ function startGroup(item, bandIndex) {
 		bandIndex,
 		widthClass: item.widthClass,
 		points: [item.point],
+		lastPoint: item.point,
 		count: 1,
 		minWidthM: item.widthM,
 		maxWidthM: item.widthM,
@@ -55,6 +75,7 @@ function startGroup(item, bandIndex) {
 
 function appendGroup(group, item) {
 	group.points.push(item.point);
+	group.lastPoint = item.point;
 	group.count++;
 	group.minWidthM = Math.min(group.minWidthM, item.widthM);
 	group.maxWidthM = Math.max(group.maxWidthM, item.widthM);
@@ -67,11 +88,9 @@ function appendGroup(group, item) {
 }
 
 function makeFeature(group, config, fmzkProperties) {
+	if (group.points.length < 2) return null;
 	const coords = simplifyLine(group.points, config.measurement.simplifyToleranceM);
-	if (coords.length < 2 && group.points.length === 1) {
-		const p = group.points[0];
-		coords.push([p[0] + 0.001, p[1] + 0.001]);
-	}
+	if (coords.length < 2) return null;
 
 	return {
 		type: 'Feature',
