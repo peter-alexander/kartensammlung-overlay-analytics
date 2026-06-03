@@ -9,7 +9,14 @@ export async function buildPmtiles(config) {
 	await fs.promises.mkdir(path.dirname(config.paths.wgs84Output), { recursive: true });
 
 	if (!fs.existsSync(config.paths.metricOutput)) {
-		throw new Error(`Metrischer Output fehlt: ${config.paths.metricOutput}`);
+		console.warn(`Metrischer Output fehlt, PMTiles-Build wird übersprungen: ${config.paths.metricOutput}`);
+		return;
+	}
+
+	const stat = await fs.promises.stat(config.paths.metricOutput);
+	if (stat.size === 0) {
+		console.warn(`Metrischer Output ist leer, PMTiles-Build wird übersprungen: ${config.paths.metricOutput}`);
+		return;
 	}
 
 	await transformMetricOutputToWgs84(config);
