@@ -21,7 +21,6 @@ export default {
 				property: 'LAYER',
 				values: ['Gehsteig']
 			}
-			// Finale FMZK-WFS-Quelle später hier wieder eintragen.
 		},
 		sis: {
 			name: 'SIS Belagsflächen Testausschnitt',
@@ -29,7 +28,6 @@ export default {
 			url: 'https://fahrrad.lima-city.de/Gehsteigbreiten-Testdaten/SISBELAGOGD.json',
 			typeProperty: 'TYPE',
 			allowedTypes: ['GG', 'EE', 'HH']
-			// Finale SIS-WFS-Quelle später hier wieder eintragen.
 		}
 	},
 	measurement: {
@@ -44,7 +42,9 @@ export default {
 		directionHardOutlierDeg: 70,
 		directionStableSpreadDeg: 25,
 		simplifyToleranceM: 0.2,
-		maxStationGapM: 2.5
+		maxStationGapM: 2.5,
+		outputValidationSampleStepM: 0.5,
+		bandTrackingMaxDistanceM: 2.0
 	},
 	widthClasses: [
 		{ id: 0, label: '< 1.2 m', min: null, max: 1.2 },
