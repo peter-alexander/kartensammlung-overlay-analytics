@@ -2,7 +2,16 @@ import { dist, lerp } from '../geom/basic.js';
 import { simplifyLine } from '../geom/simplify.js';
 
 export function groupMeasurements({ measurements, config, fmzkProperties, connectionValidator = null }) {
-	if (!measurements.length) return [];
+	const stats = {
+		groupsStarted: 0,
+		outputSegmentsWritten: 0,
+		droppedSinglePointGroups: 0,
+		splitByWidthClass: 0,
+		splitByStationGap: 0,
+		splitByInvalidConnection: 0
+	};
+
+	if (!measurements.length) return { features: [], stats };
 
 	const byBand = new Map();
 	for (const m of measurements) {
@@ -18,28 +27,43 @@ export function groupMeasurements({ measurements, config, fmzkProperties, connec
 		let current = null;
 
 		for (const item of items) {
-			const hasInvalidConnection = current && connectionValidator &&
-				!connectionValidator(current.lastPoint, item.point);
+			const splitReason = getSplitReason({ current, item, config, connectionValidator });
 
-			const startsNew = !current ||
-				current.widthClass !== item.widthClass ||
-				item.chainM - current.lastChainM > config.measurement.maxStationGapM ||
-				hasInvalidConnection;
-
-			if (startsNew) {
-				const feature = current ? makeFeature(current, config, fmzkProperties) : null;
-				if (feature) features.push(feature);
+			if (splitReason) {
+				flushGroup({ current, features, config, fmzkProperties, stats });
+				if (splitReason === 'width_class') stats.splitByWidthClass++;
+				if (splitReason === 'station_gap') stats.splitByStationGap++;
+				if (splitReason === 'invalid_connection') stats.splitByInvalidConnection++;
 				current = startGroup(item, Number(bandKey));
+				stats.groupsStarted++;
 			} else {
 				appendGroup(current, item);
 			}
 		}
 
-		const feature = current ? makeFeature(current, config, fmzkProperties) : null;
-		if (feature) features.push(feature);
+		flushGroup({ current, features, config, fmzkProperties, stats });
 	}
 
-	return features;
+	return { features, stats };
+}
+
+function getSplitReason({ current, item, config, connectionValidator }) {
+	if (!current) return 'new_group';
+	if (current.widthClass !== item.widthClass) return 'width_class';
+	if (item.chainM - current.lastChainM > config.measurement.maxStationGapM) return 'station_gap';
+	if (connectionValidator && !connectionValidator(current.lastPoint, item.point)) return 'invalid_connection';
+	return null;
+}
+
+function flushGroup({ current, features, config, fmzkProperties, stats }) {
+	if (!current) return;
+	const feature = makeFeature(current, config, fmzkProperties);
+	if (feature) {
+		features.push(feature);
+		stats.outputSegmentsWritten++;
+	} else if (current.points.length < 2) {
+		stats.droppedSinglePointGroups++;
+	}
 }
 
 export function linePassesPointValidator(a, b, validator, sampleStepM) {
