@@ -44,19 +44,30 @@ export function measureFmzkFeature({ feature, sisDb, config }) {
 		stats.stations += stations.length;
 
 		const measurements = [];
+		let previousBands = [];
 		for (const station of stations) {
-			const stationMeasurements = measureStation({ station, sisCandidates, config });
+			const stationMeasurementsRaw = measureStation({ station, sisCandidates, config });
+			const tracked = trackBands({
+				measurements: stationMeasurementsRaw,
+				previousBands,
+				maxDistanceM: config.measurement.bandTrackingMaxDistanceM || 2.0,
+				stats
+			});
+			previousBands = tracked.nextBands;
+
 			stats.crossSections++;
-			stats.measurements += stationMeasurements.length;
-			measurements.push(...stationMeasurements);
+			stats.measurements += tracked.measurements.length;
+			measurements.push(...tracked.measurements);
 		}
 
-		out.push(...groupMeasurements({
+		const grouped = groupMeasurements({
 			measurements,
 			config,
 			fmzkProperties: feature.properties || {},
 			connectionValidator
-		}));
+		});
+		out.push(...grouped.features);
+		mergeStats(stats, grouped.stats);
 	}
 
 	return { features: out, stats };
@@ -111,7 +122,45 @@ function measureStation({ station, sisCandidates, config }) {
 	}
 
 	measured.sort((a, b) => a.inwardDistanceM - b.inwardDistanceM);
-	return measured.map((m, index) => ({ ...m, bandIndex: index }));
+	return measured;
+}
+
+function trackBands({ measurements, previousBands, maxDistanceM, stats }) {
+	if (!measurements.length) return { measurements: [], nextBands: [] };
+
+	const assigned = [];
+	const usedPrevious = new Set();
+	let nextBandId = previousBands.reduce((max, band) => Math.max(max, band.bandIndex + 1), 0);
+
+	for (const measurement of measurements) {
+		let best = null;
+		let bestDistance = Infinity;
+
+		for (let i = 0; i < previousBands.length; i++) {
+			if (usedPrevious.has(i)) continue;
+			const d = dist(measurement.point, previousBands[i].point);
+			if (d < bestDistance) {
+				bestDistance = d;
+				best = i;
+			}
+		}
+
+		if (best !== null && bestDistance <= maxDistanceM) {
+			const bandIndex = previousBands[best].bandIndex;
+			usedPrevious.add(best);
+			assigned.push({ ...measurement, bandIndex });
+			stats.bandTrackingMatched++;
+		} else {
+			assigned.push({ ...measurement, bandIndex: nextBandId++ });
+			stats.bandTrackingNewBands++;
+		}
+	}
+
+	assigned.sort((a, b) => a.inwardDistanceM - b.inwardDistanceM);
+	return {
+		measurements: assigned,
+		nextBands: assigned.map((m) => ({ bandIndex: m.bandIndex, point: m.point }))
+	};
 }
 
 function pointInsideAnySis(point, sisCandidates) {
@@ -130,8 +179,22 @@ function emptyStats() {
 		sisCandidates: 0,
 		stations: 0,
 		crossSections: 0,
-		measurements: 0
+		measurements: 0,
+		bandTrackingMatched: 0,
+		bandTrackingNewBands: 0,
+		groupsStarted: 0,
+		outputSegmentsWritten: 0,
+		droppedSinglePointGroups: 0,
+		splitByWidthClass: 0,
+		splitByStationGap: 0,
+		splitByInvalidConnection: 0
 	};
+}
+
+function mergeStats(target, source) {
+	for (const [key, value] of Object.entries(source)) {
+		if (typeof value === 'number') target[key] = (target[key] || 0) + value;
+	}
 }
 
 function round(value, digits) {
