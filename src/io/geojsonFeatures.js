@@ -1,9 +1,14 @@
 import fs from 'node:fs';
 import readline from 'node:readline';
-import { chain } from 'stream-chain';
-import { parser } from 'stream-json';
-import { pick } from 'stream-json/filters/Pick.js';
-import { streamArray } from 'stream-json/streamers/StreamArray.js';
+import chainPkg from 'stream-chain';
+import streamJsonPkg from 'stream-json';
+import pickPkg from 'stream-json/filters/Pick.js';
+import streamArrayPkg from 'stream-json/streamers/StreamArray.js';
+
+const { chain } = chainPkg;
+const { parser } = streamJsonPkg;
+const { pick } = pickPkg;
+const { streamArray } = streamArrayPkg;
 
 export async function* iterateGeoJsonFeatures(filePath) {
 	if (/(\.geojsonseq|\.ndjson|\.jsonl)$/i.test(filePath)) {
