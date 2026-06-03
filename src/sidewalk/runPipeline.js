@@ -3,6 +3,7 @@ import path from 'node:path';
 import { downloadToFile, ensureDir } from '../io/download.js';
 import { iterateGeoJsonFeatures, writeGeoJsonSeqFeature } from '../io/geojsonFeatures.js';
 import { buildSisIndex, openSisIndex } from '../io/sisIndex.js';
+import { runCommand } from '../io/commands.js';
 import { measureFmzkFeature } from './measure.js';
 
 export async function runSidewalkWidthsPipeline(config) {
@@ -10,14 +11,29 @@ export async function runSidewalkWidthsPipeline(config) {
 	await ensureDir(path.dirname(config.paths.metricOutput));
 	await ensureDir(path.dirname(config.paths.pmtilesOutput));
 
-	const fmzkPath = path.join(config.paths.workDir, 'fmzk.geojson');
-	const sisPath = path.join(config.paths.workDir, 'sis.geojson');
+	const fmzkRawPath = path.join(config.paths.workDir, 'fmzk_raw.geojson');
+	const sisRawPath = path.join(config.paths.workDir, 'sis_raw.geojson');
+	const fmzkPath = path.join(config.paths.workDir, 'fmzk_metric.geojson');
+	const sisPath = path.join(config.paths.workDir, 'sis_metric.geojson');
 
 	console.log(`Download FMZK: ${config.sources.fmzk.url}`);
-	await downloadToFile(config.sources.fmzk.url, fmzkPath);
+	await downloadToFile(config.sources.fmzk.url, fmzkRawPath);
 
 	console.log(`Download SIS: ${config.sources.sis.url}`);
-	await downloadToFile(config.sources.sis.url, sisPath);
+	await downloadToFile(config.sources.sis.url, sisRawPath);
+
+	await prepareMetricSource({
+		inputPath: fmzkRawPath,
+		outputPath: fmzkPath,
+		sourceConfig: config.sources.fmzk,
+		config
+	});
+	await prepareMetricSource({
+		inputPath: sisRawPath,
+		outputPath: sisPath,
+		sourceConfig: config.sources.sis,
+		config
+	});
 
 	console.log('Baue SIS SQLite/RTree Index');
 	const sisIndexStats = await buildSisIndex({
@@ -96,6 +112,19 @@ export async function runSidewalkWidthsPipeline(config) {
 	await fs.promises.writeFile(config.paths.summary, JSON.stringify(summary, null, 2), 'utf8');
 	console.log(JSON.stringify({ done: true, summary }));
 	return summary;
+}
+
+async function prepareMetricSource({ inputPath, outputPath, sourceConfig, config }) {
+	await fs.promises.rm(outputPath, { force: true });
+	const inputCrs = sourceConfig.crs || config.crs.input || 'EPSG:4326';
+	console.log(`Transformiere ${sourceConfig.name}: ${inputCrs} -> ${config.crs.metric}`);
+	await runCommand('ogr2ogr', [
+		'-f', 'GeoJSON',
+		'-s_srs', inputCrs,
+		'-t_srs', config.crs.metric,
+		outputPath,
+		inputPath
+	]);
 }
 
 function passesFeatureFilter(feature, filter) {
