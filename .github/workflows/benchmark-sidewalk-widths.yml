@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      upload_pmtiles:
+        description: Upload PMTiles to Easyname FTP
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   build:
@@ -30,7 +35,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gdal-bin tippecanoe
+          sudo apt-get install -y gdal-bin tippecanoe lftp
 
       - name: Install npm dependencies
         run: npm install
@@ -42,6 +47,14 @@ jobs:
           else
             npm run build:sidewalk-widths -- --config "${{ inputs.config_path }}"
           fi
+
+      - name: Upload PMTiles to Easyname
+        if: ${{ inputs.upload_pmtiles && !inputs.skip_pmtiles }}
+        env:
+          EASYNAME_FTP_HOST: ${{ secrets.EASYNAME_FTP_HOST }}
+          EASYNAME_FTP_USER: ${{ secrets.EASYNAME_FTP_USER }}
+          EASYNAME_FTP_PASSWORD: ${{ secrets.EASYNAME_FTP_PASSWORD }}
+        run: bash scripts/upload-easyname.sh Gehsteigbreiten
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
