@@ -6,14 +6,13 @@ import { loadConfig } from '../src/config/loadConfig.js';
 
 export async function buildPmtiles(config) {
 	await fs.promises.mkdir(path.dirname(config.paths.pmtilesOutput), { recursive: true });
+	await fs.promises.mkdir(path.dirname(config.paths.wgs84Output), { recursive: true });
 
-	if (!fs.existsSync(config.paths.wgs84Output)) {
-		console.warn(`WGS84-Output fehlt, verwende metrischen Output direkt: ${config.paths.metricOutput}`);
+	if (!fs.existsSync(config.paths.metricOutput)) {
+		throw new Error(`Metrischer Output fehlt: ${config.paths.metricOutput}`);
 	}
 
-	const input = fs.existsSync(config.paths.wgs84Output)
-		? config.paths.wgs84Output
-		: config.paths.metricOutput;
+	await transformMetricOutputToWgs84(config);
 
 	const args = [
 		'-o', config.paths.pmtilesOutput,
@@ -23,10 +22,22 @@ export async function buildPmtiles(config) {
 		'--maximum-zoom', String(config.pmtiles.maxZoom),
 		'--base-zoom', String(config.pmtiles.baseZoom),
 		'--drop-densest-as-needed',
-		input
+		config.paths.wgs84Output
 	];
 
 	await runCommand('tippecanoe', args);
+}
+
+async function transformMetricOutputToWgs84(config) {
+	await fs.promises.rm(config.paths.wgs84Output, { force: true });
+
+	await runCommand('ogr2ogr', [
+		'-f', 'GeoJSONSeq',
+		'-s_srs', config.crs.metric,
+		'-t_srs', config.crs.pmtiles,
+		config.paths.wgs84Output,
+		config.paths.metricOutput
+	]);
 }
 
 function runCommand(command, args) {
