@@ -1,11 +1,11 @@
 import { bboxOfGeometry, expandBbox } from '../geom/bbox.js';
-import { extractPolygons } from '../geom/polygon.js';
+import { extractPolygons, pointInPolygonCoords } from '../geom/polygon.js';
 import { buildRingStations } from '../geom/stations.js';
 import { dist, lerp, ensureClosedRing } from '../geom/basic.js';
 import { lineGeometryInsideIntervals, mergeIntervals } from '../geom/linePolygonIntervals.js';
 import { querySisIndex } from '../io/sisIndex.js';
 import { widthClass } from './classes.js';
-import { groupMeasurements } from './segments.js';
+import { groupMeasurements, linePassesPointValidator } from './segments.js';
 
 export function measureFmzkFeature({ feature, sisDb, config }) {
 	const geometry = feature.geometry;
@@ -29,6 +29,14 @@ export function measureFmzkFeature({ feature, sisDb, config }) {
 	const polygons = extractPolygons(geometry);
 	stats.fmzkPolygons = polygons.length;
 
+	const pointValidator = (point) => pointInsideAnySis(point, sisCandidates);
+	const connectionValidator = (a, b) => linePassesPointValidator(
+		a,
+		b,
+		pointValidator,
+		config.measurement.outputValidationSampleStepM || 0.5
+	);
+
 	for (const polygonCoords of polygons) {
 		if (!polygonCoords?.length) continue;
 		const outerRing = ensureClosedRing(polygonCoords[0]);
@@ -46,7 +54,8 @@ export function measureFmzkFeature({ feature, sisDb, config }) {
 		out.push(...groupMeasurements({
 			measurements,
 			config,
-			fmzkProperties: feature.properties || {}
+			fmzkProperties: feature.properties || {},
+			connectionValidator
 		}));
 	}
 
@@ -103,6 +112,15 @@ function measureStation({ station, sisCandidates, config }) {
 
 	measured.sort((a, b) => a.inwardDistanceM - b.inwardDistanceM);
 	return measured.map((m, index) => ({ ...m, bandIndex: index }));
+}
+
+function pointInsideAnySis(point, sisCandidates) {
+	for (const candidate of sisCandidates) {
+		for (const polygonCoords of extractPolygons(candidate.geometry)) {
+			if (pointInPolygonCoords(point, polygonCoords)) return true;
+		}
+	}
+	return false;
 }
 
 function emptyStats() {
