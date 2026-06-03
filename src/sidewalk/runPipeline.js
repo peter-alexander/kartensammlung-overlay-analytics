@@ -43,6 +43,10 @@ export async function runSidewalkWidthsPipeline(config) {
 		sis_index: sisIndexStats,
 		fmzk_features: 0,
 		output_features: 0,
+		fmzk_diagnostics: {
+			geometryTypeCounts: {},
+			samplePropertyKeys: []
+		},
 		stats: {
 			fmzkPolygons: 0,
 			sisCandidates: 0,
@@ -55,6 +59,7 @@ export async function runSidewalkWidthsPipeline(config) {
 	try {
 		for await (const feature of iterateGeoJsonFeatures(fmzkPath)) {
 			summary.fmzk_features++;
+			collectFmzkDiagnostics(summary.fmzk_diagnostics, feature);
 			const result = measureFmzkFeature({ feature, sisDb, config });
 
 			for (const outFeature of result.features) {
@@ -81,6 +86,16 @@ export async function runSidewalkWidthsPipeline(config) {
 	await fs.promises.writeFile(config.paths.summary, JSON.stringify(summary, null, 2), 'utf8');
 	console.log(JSON.stringify({ done: true, summary }));
 	return summary;
+}
+
+function collectFmzkDiagnostics(target, feature) {
+	const geomType = feature.geometry?.type || 'null';
+	target.geometryTypeCounts[geomType] = (target.geometryTypeCounts[geomType] || 0) + 1;
+
+	const properties = feature.properties || {};
+	const keys = new Set(target.samplePropertyKeys);
+	for (const key of Object.keys(properties).slice(0, 40)) keys.add(key);
+	target.samplePropertyKeys = [...keys];
 }
 
 function mergeStats(target, source) {
