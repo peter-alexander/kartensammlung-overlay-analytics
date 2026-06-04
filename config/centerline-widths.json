@@ -40,8 +40,12 @@
 		"extend": true,
 		"min_line_length_m": 1.0,
 		"keep_branches": true,
-		"post_simplify_tolerance_m": 1.0,
-		"post_simplify_preserve_topology": false
+		"post_simplify_tolerance_m": 0.25,
+		"post_simplify_preserve_topology": false,
+		"straighten_nearly_linear": true,
+		"straighten_min_length_m": 8.0,
+		"straighten_max_deviation_m": 2.0,
+		"straighten_max_length_ratio": 1.8
 	},
 	"measurement": {
 		"step_m": 1.0,
