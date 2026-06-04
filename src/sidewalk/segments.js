@@ -1,5 +1,6 @@
 import { dist, lerp } from '../geom/basic.js';
 import { simplifyLine } from '../geom/simplify.js';
+import { aggregateSegmentClassification } from './areaClassification.js';
 
 export function groupMeasurements({ measurements, config, fmzkProperties, connectionValidator = null }) {
 	const stats = {
@@ -93,7 +94,13 @@ function startGroup(item, bandIndex) {
 		directionQualities: new Set([item.directionQuality]),
 		maxDirectionDeltaDeg: item.directionDeltaDeg,
 		maxDirectionSpreadDeg: item.directionSpreadDeg,
-		maxSisPartsCount: item.sisPartsCount
+		maxSisPartsCount: item.sisPartsCount,
+		sumCornerScore: item.cornerScore || 0,
+		sumPlazaScore: item.plazaScore || 0,
+		sumComplexityScore: item.complexityScore || 0,
+		maxCornerScore: item.cornerScore || 0,
+		maxPlazaScore: item.plazaScore || 0,
+		maxComplexityScore: item.complexityScore || 0
 	};
 }
 
@@ -109,12 +116,20 @@ function appendGroup(group, item) {
 	group.maxDirectionDeltaDeg = Math.max(group.maxDirectionDeltaDeg, item.directionDeltaDeg);
 	group.maxDirectionSpreadDeg = Math.max(group.maxDirectionSpreadDeg, item.directionSpreadDeg);
 	group.maxSisPartsCount = Math.max(group.maxSisPartsCount, item.sisPartsCount);
+	group.sumCornerScore += item.cornerScore || 0;
+	group.sumPlazaScore += item.plazaScore || 0;
+	group.sumComplexityScore += item.complexityScore || 0;
+	group.maxCornerScore = Math.max(group.maxCornerScore, item.cornerScore || 0);
+	group.maxPlazaScore = Math.max(group.maxPlazaScore, item.plazaScore || 0);
+	group.maxComplexityScore = Math.max(group.maxComplexityScore, item.complexityScore || 0);
 }
 
 function makeFeature(group, config, fmzkProperties) {
 	if (group.points.length < 2) return null;
 	const coords = simplifyLine(group.points, config.measurement.simplifyToleranceM);
 	if (coords.length < 2) return null;
+
+	const areaClassification = aggregateSegmentClassification(group);
 
 	return {
 		type: 'Feature',
@@ -133,6 +148,10 @@ function makeFeature(group, config, fmzkProperties) {
 			from_m: round(group.firstChainM, 2),
 			to_m: round(group.lastChainM, 2),
 			quality: summarizeQuality(group.directionQualities),
+			area_class: areaClassification.areaClass,
+			corner_score: areaClassification.cornerScore,
+			plaza_score: areaClassification.plazaScore,
+			complexity_score: areaClassification.complexityScore,
 			max_direction_delta_deg: round(group.maxDirectionDeltaDeg, 2),
 			max_direction_spread_deg: round(group.maxDirectionSpreadDeg, 2),
 			max_sis_parts_count: group.maxSisPartsCount,
