@@ -1,19 +1,26 @@
 export function classifyMeasurementContext(measurement) {
+	const spreadComponent = ramp(measurement.directionSpreadDeg, 35, 90);
+	const deltaComponent = ramp(measurement.directionDeltaDeg, 35, 90);
+	const widthComponent = widthRamp(measurement.widthM, 4.0, 10.0);
+	const partsComponent = Math.min(measurement.sisPartsCount, 6) / 6;
+
 	const cornerScore = clamp01(
-		measurement.directionSpreadDeg / 60 * 0.7 +
-		measurement.directionDeltaDeg / 90 * 0.3
+		deltaComponent * 0.65 +
+		spreadComponent * deltaComponent * 0.30 +
+		spreadComponent * 0.05
 	);
 
 	const plazaScore = clamp01(
-		widthRamp(measurement.widthM, 4.0, 10.0) * 0.65 +
-		(measurement.directionSpreadDeg / 60) * 0.25 +
-		Math.min(measurement.sisPartsCount, 6) / 6 * 0.10
+		widthComponent * 0.65 +
+		spreadComponent * 0.20 +
+		partsComponent * 0.15
 	);
 
 	const complexityScore = clamp01(
-		cornerScore * 0.45 +
-		plazaScore * 0.30 +
-		Math.min(measurement.sisPartsCount, 8) / 8 * 0.25
+		cornerScore * 0.35 +
+		plazaScore * 0.35 +
+		partsComponent * 0.20 +
+		spreadComponent * 0.10
 	);
 
 	return {
@@ -30,9 +37,9 @@ export function aggregateSegmentClassification(group) {
 	const avgPlazaScore = group.sumPlazaScore / count;
 	const avgComplexityScore = group.sumComplexityScore / count;
 
-	const cornerScore = Math.max(group.maxCornerScore, avgCornerScore * 0.75);
-	const plazaScore = Math.max(group.maxPlazaScore, avgPlazaScore * 0.85);
-	const complexityScore = Math.max(group.maxComplexityScore, avgComplexityScore * 0.85);
+	const cornerScore = Math.max(avgCornerScore, group.maxCornerScore * 0.35);
+	const plazaScore = Math.max(avgPlazaScore, group.maxPlazaScore * 0.65);
+	const complexityScore = Math.max(avgComplexityScore, group.maxComplexityScore * 0.50);
 
 	return {
 		areaClass: classifyArea({ cornerScore, plazaScore, complexityScore }),
@@ -48,6 +55,12 @@ function classifyArea({ cornerScore, plazaScore, complexityScore }) {
 	if (complexityScore >= 0.58) return 'complex_area';
 	if (complexityScore >= 0.38 || cornerScore >= 0.45 || plazaScore >= 0.45) return 'uncertain';
 	return 'normal_sidewalk';
+}
+
+function ramp(value, min, max) {
+	if (value <= min) return 0;
+	if (value >= max) return 1;
+	return (value - min) / (max - min);
 }
 
 function widthRamp(widthM, minM, maxM) {
