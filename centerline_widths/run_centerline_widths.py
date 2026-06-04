@@ -44,6 +44,7 @@ def main():
 		'centerline_merged': 0,
 		'centerline_post_simplified': 0,
 		'centerline_straightened': 0,
+		'centerline_straight_simplified': 0,
 		'stations': 0,
 		'measurements': 0,
 		'output_segments': 0,
@@ -169,8 +170,9 @@ def postprocess_centerlines(lines, config, summary):
 			continue
 
 		line2 = straighten_if_nearly_linear(line, config, summary)
-		line3 = simplify_centerline(line2, config, summary)
-		out.extend(explode_lines(line3))
+		line3 = straight_simplify_if_nearly_linear(line2, config, summary)
+		line4 = simplify_centerline(line3, config, summary)
+		out.extend(explode_lines(line4))
 	return [line for line in out if line is not None and not line.is_empty and line.length > 0]
 
 
@@ -215,6 +217,31 @@ def straighten_if_nearly_linear(line, config, summary):
 		summary['centerline_straightened'] += 1
 		return base
 	return line
+
+
+def straight_simplify_if_nearly_linear(line, config, summary):
+	cfg = config['centerline']
+	if not cfg.get('straight_simplify_nearly_linear', False):
+		return line
+	if len(line.coords) < 4:
+		return line
+
+	tol = cfg.get('straight_simplify_tolerance_m', 0)
+	if tol <= 0:
+		return line
+
+	simplified = line.simplify(tol, preserve_topology=False)
+	if simplified is None or simplified.is_empty or not isinstance(simplified, LineString):
+		return line
+	if len(simplified.coords) >= len(line.coords) - cfg.get('straight_simplify_min_reduction', 2):
+		return line
+
+	max_hausdorff = cfg.get('straight_simplify_max_hausdorff_m', tol)
+	if line.hausdorff_distance(simplified) > max_hausdorff:
+		return line
+
+	summary['centerline_straight_simplified'] += 1
+	return simplified
 
 
 def simplify_centerline(line, config, summary):
