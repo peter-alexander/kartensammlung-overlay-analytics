@@ -46,7 +46,9 @@
 		"cross_section_half_length_m": 30.0,
 		"min_width_m": 0.2,
 		"simplify_tolerance_m": 0.2,
-		"max_station_gap_m": 2.5
+		"max_station_gap_m": 2.5,
+		"output_validation_sample_step_m": 0.5,
+		"output_geometry": "centerline_when_inside_sis"
 	},
 	"width_classes": [
 		{ "id": 0, "label": "< 1.2 m", "min": null, "max": 1.2 },
