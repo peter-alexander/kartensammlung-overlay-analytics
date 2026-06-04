@@ -7,7 +7,7 @@ from urllib.request import urlretrieve
 
 import geopandas as gpd
 import pygeoops
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString, MultiLineString, Point
 from shapely.ops import unary_union
 from shapely import make_valid
 
@@ -44,6 +44,8 @@ def main():
 		'stations': 0,
 		'measurements': 0,
 		'output_segments': 0,
+		'output_points_centerline': 0,
+		'output_points_sis_midpoint': 0,
 		'split_by_invalid_connection': 0,
 		'dropped_single_point_groups': 0,
 		'dropped_invalid_segments': 0,
@@ -96,6 +98,8 @@ def main():
 			measurements = measure_line(line, sis_union, fmzk_id, part_index, config)
 			summary['stations'] += measurements['stations']
 			summary['measurements'] += len(measurements['points'])
+			summary['output_points_centerline'] += measurements['output_points_centerline']
+			summary['output_points_sis_midpoint'] += measurements['output_points_sis_midpoint']
 			segments, group_stats = group_measurements(measurements['points'], config, fmzk_id, part_index, sis_union)
 			summary['output_segments'] += len(segments)
 			merge_summary(summary, group_stats)
@@ -172,9 +176,11 @@ def measure_line(line, sis_union, fmzk_id, part_index, config):
 	half = config['measurement']['cross_section_half_length_m']
 	points = []
 	stations = 0
+	output_points_centerline = 0
+	output_points_sis_midpoint = 0
 	length = line.length
 	if length <= 0:
-		return {'stations': 0, 'points': []}
+		return {'stations': 0, 'points': [], 'output_points_centerline': 0, 'output_points_sis_midpoint': 0}
 
 	s = 0.0
 	while s <= length:
@@ -191,8 +197,16 @@ def measure_line(line, sis_union, fmzk_id, part_index, config):
 				seg = segments[0]
 				mid = seg.interpolate(0.5, normalized=True)
 				width = seg.length
+				out_point, source = choose_output_point(p, mid, seg, config)
+				if source == 'centerline':
+					output_points_centerline += 1
+				else:
+					output_points_sis_midpoint += 1
 				points.append({
-					'point': (mid.x, mid.y),
+					'point': (out_point.x, out_point.y),
+					'centerline_point': (p.x, p.y),
+					'sis_midpoint': (mid.x, mid.y),
+					'output_point_source': source,
 					'chain_m': s,
 					'width_m': width,
 					'width_class': width_class(width, config['width_classes']),
@@ -201,7 +215,21 @@ def measure_line(line, sis_union, fmzk_id, part_index, config):
 				})
 		stations += 1
 		s += step
-	return {'stations': stations, 'points': points}
+	return {
+		'stations': stations,
+		'points': points,
+		'output_points_centerline': output_points_centerline,
+		'output_points_sis_midpoint': output_points_sis_midpoint
+	}
+
+
+def choose_output_point(centerline_point, sis_midpoint, measured_segment, config):
+	mode = config['measurement'].get('output_geometry', 'sis_midpoint')
+	if mode == 'centerline':
+		return centerline_point, 'centerline'
+	if mode == 'centerline_when_inside_sis' and measured_segment.buffer(1e-6).covers(centerline_point):
+		return centerline_point, 'centerline'
+	return sis_midpoint, 'sis_midpoint'
 
 
 def tangent_at(line, s, delta):
@@ -303,6 +331,7 @@ def make_segment_feature(items, config, fmzk_id, part_index, sis_union, stats):
 			stats['fallback_unsimplified_segments'] += 1
 
 	widths = [item['width_m'] for item in items]
+	point_sources = {item.get('output_point_source', 'unknown') for item in items}
 	return {
 		'type': 'Feature',
 		'geometry': mapping_line(output_line),
@@ -316,6 +345,7 @@ def make_segment_feature(items, config, fmzk_id, part_index, sis_union, stats):
 			'count': len(items),
 			'from_m': round(items[0]['chain_m'], 2),
 			'to_m': round(items[-1]['chain_m'], 2),
+			'geometry_source': '+'.join(sorted(point_sources)),
 			'method': 'centerline_widths_v1'
 		}
 	}
