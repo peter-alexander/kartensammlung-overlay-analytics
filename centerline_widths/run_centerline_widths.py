@@ -7,8 +7,8 @@ from urllib.request import urlretrieve
 
 import geopandas as gpd
 import pygeoops
-from shapely.geometry import LineString, MultiLineString
-from shapely.ops import unary_union
+from shapely.geometry import LineString, MultiLineString, Point
+from shapely.ops import linemerge, unary_union
 from shapely import make_valid
 
 
@@ -41,6 +41,7 @@ def main():
 		'centerline_ok': 0,
 		'centerline_failed': 0,
 		'centerline_parts': 0,
+		'centerline_merged': 0,
 		'centerline_post_simplified': 0,
 		'centerline_straightened': 0,
 		'stations': 0,
@@ -161,6 +162,7 @@ def prepare_centerline_geom(geom, config):
 
 
 def postprocess_centerlines(lines, config, summary):
+	lines = merge_connected_centerlines(lines, config, summary)
 	out = []
 	for line in lines:
 		if line is None or line.is_empty or line.length <= 0:
@@ -170,6 +172,22 @@ def postprocess_centerlines(lines, config, summary):
 		line3 = simplify_centerline(line2, config, summary)
 		out.extend(explode_lines(line3))
 	return [line for line in out if line is not None and not line.is_empty and line.length > 0]
+
+
+def merge_connected_centerlines(lines, config, summary):
+	if not config['centerline'].get('merge_connected_lines', False):
+		return lines
+	if len(lines) <= 1:
+		return lines
+	try:
+		merged = linemerge(unary_union(lines))
+		merged_lines = explode_lines(merged)
+		if merged_lines and len(merged_lines) < len(lines):
+			summary['centerline_merged'] += len(lines) - len(merged_lines)
+			return merged_lines
+		return merged_lines or lines
+	except Exception:
+		return lines
 
 
 def straighten_if_nearly_linear(line, config, summary):
@@ -189,17 +207,11 @@ def straighten_if_nearly_linear(line, config, summary):
 		return line
 
 	length_ratio = line.length / base.length
-	max_length_ratio = cfg.get('straighten_max_length_ratio', 1.8)
-	if length_ratio > max_length_ratio:
+	if length_ratio > cfg.get('straighten_max_length_ratio', 2.5):
 		return line
 
-	max_dev = 0.0
-	for coord in coords[1:-1]:
-		dev = base.distance(LineString([coord, coord]))
-		if dev > max_dev:
-			max_dev = dev
-
-	if max_dev <= cfg.get('straighten_max_deviation_m', 2.0):
+	max_dev = max(base.distance(Point(coord)) for coord in coords[1:-1])
+	if max_dev <= cfg.get('straighten_max_deviation_m', 3.0):
 		summary['centerline_straightened'] += 1
 		return base
 	return line
