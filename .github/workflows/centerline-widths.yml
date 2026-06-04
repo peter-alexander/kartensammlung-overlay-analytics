@@ -8,6 +8,11 @@ on:
         required: true
         default: config/centerline-widths.json
         type: string
+      centerline_only:
+        description: Keine Analyse, nur Centerline ausgeben
+        required: true
+        default: false
+        type: boolean
       upload_pmtiles:
         description: Upload PMTiles to Easyname FTP
         required: true
@@ -42,30 +47,46 @@ jobs:
       - name: Transform output to WGS84
         run: |
           mkdir -p work/centerline-widths dist/centerline-widths
-          if [ -s work/centerline-widths/centerline_widths_metric.geojsonseq ]; then
+          if [ "${{ inputs.centerline_only }}" = "true" ]; then
+            INPUT_FILE="work/centerline-widths/centerlines_metric.geojsonseq"
+            OUTPUT_FILE="work/centerline-widths/centerlines_4326.geojsonseq"
+          else
+            INPUT_FILE="work/centerline-widths/centerline_widths_metric.geojsonseq"
+            OUTPUT_FILE="work/centerline-widths/centerline_widths_4326.geojsonseq"
+          fi
+
+          if [ -s "$INPUT_FILE" ]; then
             ogr2ogr -f GeoJSONSeq \
               -s_srs EPSG:31256 \
               -t_srs EPSG:4326 \
-              work/centerline-widths/centerline_widths_4326.geojsonseq \
-              work/centerline-widths/centerline_widths_metric.geojsonseq
+              "$OUTPUT_FILE" \
+              "$INPUT_FILE"
           else
-            echo "No centerline measurements generated; skipping transform."
+            echo "No input generated; skipping transform: $INPUT_FILE"
           fi
 
       - name: Build PMTiles
         run: |
-          if [ -s work/centerline-widths/centerline_widths_4326.geojsonseq ]; then
+          if [ "${{ inputs.centerline_only }}" = "true" ]; then
+            INPUT_FILE="work/centerline-widths/centerlines_4326.geojsonseq"
+            LAYER_NAME="centerlines"
+          else
+            INPUT_FILE="work/centerline-widths/centerline_widths_4326.geojsonseq"
+            LAYER_NAME="centerline_widths"
+          fi
+
+          if [ -s "$INPUT_FILE" ]; then
             tippecanoe \
               -o dist/centerline-widths/centerline_widths.pmtiles \
               --force \
-              --layer centerline_widths \
+              --layer "$LAYER_NAME" \
               --minimum-zoom 12 \
               --maximum-zoom 17 \
               --base-zoom 14 \
               --drop-densest-as-needed \
-              work/centerline-widths/centerline_widths_4326.geojsonseq
+              "$INPUT_FILE"
           else
-            echo "No WGS84 measurements generated; skipping PMTiles."
+            echo "No WGS84 output generated; skipping PMTiles: $INPUT_FILE"
           fi
 
       - name: Upload PMTiles to Easyname
