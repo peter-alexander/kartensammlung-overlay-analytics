@@ -42,6 +42,7 @@ def main():
 		'centerline_failed': 0,
 		'centerline_parts': 0,
 		'centerline_post_simplified': 0,
+		'centerline_straightened': 0,
 		'stations': 0,
 		'measurements': 0,
 		'output_segments': 0,
@@ -160,30 +161,64 @@ def prepare_centerline_geom(geom, config):
 
 
 def postprocess_centerlines(lines, config, summary):
-	tol = config['centerline'].get('post_simplify_tolerance_m', 0)
-	preserve = config['centerline'].get('post_simplify_preserve_topology', False)
-	if not tol or tol <= 0:
-		return lines
-
 	out = []
 	for line in lines:
 		if line is None or line.is_empty or line.length <= 0:
 			continue
-		simplified = line.simplify(tol, preserve_topology=preserve)
-		if simplified is None or simplified.is_empty:
-			out.append(line)
-			continue
-		simplified_lines = explode_lines(simplified)
-		if not simplified_lines:
-			out.append(line)
-			continue
-		for item in simplified_lines:
-			if item.length <= 0:
-				continue
-			out.append(item)
-			if len(item.coords) < len(line.coords) or abs(item.length - line.length) > 0.01:
-				summary['centerline_post_simplified'] += 1
-	return out
+
+		line2 = straighten_if_nearly_linear(line, config, summary)
+		line3 = simplify_centerline(line2, config, summary)
+		out.extend(explode_lines(line3))
+	return [line for line in out if line is not None and not line.is_empty and line.length > 0]
+
+
+def straighten_if_nearly_linear(line, config, summary):
+	cfg = config['centerline']
+	if not cfg.get('straighten_nearly_linear', False):
+		return line
+	if len(line.coords) < 3:
+		return line
+	if line.length < cfg.get('straighten_min_length_m', 8.0):
+		return line
+
+	coords = list(line.coords)
+	start = coords[0]
+	end = coords[-1]
+	base = LineString([start, end])
+	if base.length <= 1e-9:
+		return line
+
+	length_ratio = line.length / base.length
+	max_length_ratio = cfg.get('straighten_max_length_ratio', 1.8)
+	if length_ratio > max_length_ratio:
+		return line
+
+	max_dev = 0.0
+	for coord in coords[1:-1]:
+		dev = base.distance(LineString([coord, coord]))
+		if dev > max_dev:
+			max_dev = dev
+
+	if max_dev <= cfg.get('straighten_max_deviation_m', 2.0):
+		summary['centerline_straightened'] += 1
+		return base
+	return line
+
+
+def simplify_centerline(line, config, summary):
+	tol = config['centerline'].get('post_simplify_tolerance_m', 0)
+	preserve = config['centerline'].get('post_simplify_preserve_topology', False)
+	if not tol or tol <= 0:
+		return line
+
+	simplified = line.simplify(tol, preserve_topology=preserve)
+	if simplified is None or simplified.is_empty:
+		return line
+	if len(explode_lines(simplified)) == 0:
+		return line
+	if isinstance(simplified, LineString) and len(simplified.coords) < len(line.coords):
+		summary['centerline_post_simplified'] += 1
+	return simplified
 
 
 def explode_lines(geom):
