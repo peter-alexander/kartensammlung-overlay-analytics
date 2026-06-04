@@ -2,7 +2,6 @@
 import argparse
 import json
 import math
-import os
 from pathlib import Path
 from urllib.request import urlretrieve
 
@@ -45,6 +44,10 @@ def main():
 		'stations': 0,
 		'measurements': 0,
 		'output_segments': 0,
+		'split_by_invalid_connection': 0,
+		'dropped_single_point_groups': 0,
+		'dropped_invalid_segments': 0,
+		'fallback_unsimplified_segments': 0,
 		'errors': {}
 	}
 
@@ -93,8 +96,9 @@ def main():
 			measurements = measure_line(line, sis_union, fmzk_id, part_index, config)
 			summary['stations'] += measurements['stations']
 			summary['measurements'] += len(measurements['points'])
-			segments = group_measurements(measurements['points'], config, fmzk_id, part_index)
+			segments, group_stats = group_measurements(measurements['points'], config, fmzk_id, part_index, sis_union)
 			summary['output_segments'] += len(segments)
+			merge_summary(summary, group_stats)
 			measurement_features.extend(segments)
 
 	write_geojsonseq(paths['centerlines_metric'], centerline_features)
@@ -225,9 +229,15 @@ def width_class(width, classes):
 	return None
 
 
-def group_measurements(points, config, fmzk_id, part_index):
+def group_measurements(points, config, fmzk_id, part_index, sis_union):
+	stats = {
+		'split_by_invalid_connection': 0,
+		'dropped_single_point_groups': 0,
+		'dropped_invalid_segments': 0,
+		'fallback_unsimplified_segments': 0
+	}
 	if not points:
-		return []
+		return [], stats
 	points.sort(key=lambda p: p['chain_m'])
 	segments = []
 	current = []
@@ -240,10 +250,13 @@ def group_measurements(points, config, fmzk_id, part_index):
 			new_group = True
 		elif p['chain_m'] - last['chain_m'] > config['measurement']['max_station_gap_m']:
 			new_group = True
+		elif not connection_inside_surface(last['point'], p['point'], sis_union, config):
+			new_group = True
+			stats['split_by_invalid_connection'] += 1
 
 		if new_group:
 			if current:
-				feature = make_segment_feature(current, config, fmzk_id, part_index)
+				feature = make_segment_feature(current, config, fmzk_id, part_index, sis_union, stats)
 				if feature:
 					segments.append(feature)
 			current = [p]
@@ -251,26 +264,48 @@ def group_measurements(points, config, fmzk_id, part_index):
 			current.append(p)
 		last = p
 	if current:
-		feature = make_segment_feature(current, config, fmzk_id, part_index)
+		feature = make_segment_feature(current, config, fmzk_id, part_index, sis_union, stats)
 		if feature:
 			segments.append(feature)
-	return segments
+	return segments, stats
 
 
-def make_segment_feature(items, config, fmzk_id, part_index):
+def connection_inside_surface(a, b, sis_union, config):
+	line = LineString([a, b])
+	if line.length <= 1e-9:
+		return True
+	sample_step = config['measurement'].get('output_validation_sample_step_m', 0.5)
+	steps = max(1, math.ceil(line.length / sample_step))
+	for i in range(0, steps + 1):
+		p = line.interpolate(i / steps, normalized=True)
+		if not sis_union.covers(p):
+			return False
+	return True
+
+
+def make_segment_feature(items, config, fmzk_id, part_index, sis_union, stats):
 	if len(items) < 2:
+		stats['dropped_single_point_groups'] += 1
 		return None
 	coords = [item['point'] for item in items]
 	line = LineString(coords)
+	if not line_inside_surface(line, sis_union, config):
+		stats['dropped_invalid_segments'] += 1
+		return None
+
+	output_line = line
 	tol = config['measurement'].get('simplify_tolerance_m', 0)
 	if tol and tol > 0:
-		line = line.simplify(tol, preserve_topology=False)
-	if line.length <= 0:
-		return None
+		simplified = line.simplify(tol, preserve_topology=False)
+		if simplified.length > 0 and line_inside_surface(simplified, sis_union, config):
+			output_line = simplified
+		else:
+			stats['fallback_unsimplified_segments'] += 1
+
 	widths = [item['width_m'] for item in items]
 	return {
 		'type': 'Feature',
-		'geometry': mapping_line(line),
+		'geometry': mapping_line(output_line),
 		'properties': {
 			'fmzk_id': fmzk_id,
 			'part_index': part_index,
@@ -286,6 +321,18 @@ def make_segment_feature(items, config, fmzk_id, part_index):
 	}
 
 
+def line_inside_surface(line, sis_union, config):
+	if line.length <= 1e-9:
+		return False
+	sample_step = config['measurement'].get('output_validation_sample_step_m', 0.5)
+	steps = max(1, math.ceil(line.length / sample_step))
+	for i in range(0, steps + 1):
+		p = line.interpolate(i / steps, normalized=True)
+		if not sis_union.covers(p):
+			return False
+	return True
+
+
 def mapping_line(line):
 	return {'type': 'LineString', 'coordinates': [(float(x), float(y)) for x, y in line.coords]}
 
@@ -296,6 +343,12 @@ def write_geojsonseq(path, features):
 		for feat in features:
 			f.write(json.dumps(feat, ensure_ascii=False))
 			f.write('\n')
+
+
+def merge_summary(summary, stats):
+	for key, value in stats.items():
+		if isinstance(value, int):
+			summary[key] = summary.get(key, 0) + value
 
 
 if __name__ == '__main__':
