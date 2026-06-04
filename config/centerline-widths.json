@@ -46,7 +46,11 @@
 		"straighten_nearly_linear": true,
 		"straighten_min_length_m": 8.0,
 		"straighten_max_deviation_m": 3.0,
-		"straighten_max_length_ratio": 2.5
+		"straighten_max_length_ratio": 2.5,
+		"straight_simplify_nearly_linear": true,
+		"straight_simplify_tolerance_m": 2.5,
+		"straight_simplify_max_hausdorff_m": 3.0,
+		"straight_simplify_min_reduction": 2
 	},
 	"measurement": {
 		"step_m": 1.0,
