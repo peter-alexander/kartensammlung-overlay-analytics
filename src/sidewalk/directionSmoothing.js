@@ -44,14 +44,20 @@ export function smoothAxisAngles(rawAnglesDeg, windowStations) {
 
 export function classifyDirection(rawDeg, usedDeg, neighborSpreadDeg, cfg) {
 	const delta = axisDeltaDeg(rawDeg, usedDeg);
-	if (neighborSpreadDeg > 45) return { quality: 'uncertain_direction', deltaDeg: delta };
-	if (delta >= cfg.directionHardOutlierDeg && neighborSpreadDeg <= cfg.directionStableSpreadDeg) {
+	const outlierDeg = cfg.directionOutlierDeg ?? 45;
+	const hardOutlierDeg = cfg.directionHardOutlierDeg ?? 70;
+	const stableSpreadDeg = cfg.directionStableSpreadDeg ?? 25;
+
+	if (delta >= hardOutlierDeg && neighborSpreadDeg > stableSpreadDeg) {
+		return { quality: 'uncertain_direction', deltaDeg: delta };
+	}
+	if (delta >= hardOutlierDeg && neighborSpreadDeg <= stableSpreadDeg) {
 		return { quality: 'direction_hard_smoothed_outlier', deltaDeg: delta };
 	}
-	if (delta >= cfg.directionOutlierDeg && neighborSpreadDeg <= cfg.directionStableSpreadDeg) {
+	if (delta >= outlierDeg && neighborSpreadDeg <= stableSpreadDeg) {
 		return { quality: 'direction_smoothed_outlier', deltaDeg: delta };
 	}
-	if (delta >= cfg.directionOutlierDeg) {
+	if (delta >= outlierDeg) {
 		return { quality: 'direction_smoothed', deltaDeg: delta };
 	}
 	return { quality: 'ok', deltaDeg: delta };
