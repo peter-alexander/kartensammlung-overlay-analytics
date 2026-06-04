@@ -49,8 +49,10 @@ trap 'rm -f "$LFTP_CMDS"' EXIT
 	else
 		REMOTE_DIR="$(dirname -- "$REMOTE_PATH")"
 		REMOTE_FILE="$(basename -- "$REMOTE_PATH")"
-		echo "mkdir -p \"$REMOTE_DIR\" || true"
-		echo "put \"$LOCAL_PATH\" -o \"$REMOTE_DIR/$REMOTE_FILE\""
+		if [ "$REMOTE_DIR" != "." ]; then
+			echo "cd \"$REMOTE_DIR\""
+		fi
+		echo "put \"$LOCAL_PATH\" -o \"$REMOTE_FILE\""
 	fi
 
 	echo 'bye'
