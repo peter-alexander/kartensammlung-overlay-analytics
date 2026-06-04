@@ -54,7 +54,10 @@ jobs:
           EASYNAME_FTP_HOST: ${{ secrets.EASYNAME_FTP_HOST }}
           EASYNAME_FTP_USER: ${{ secrets.EASYNAME_FTP_USER }}
           EASYNAME_FTP_PASSWORD: ${{ secrets.EASYNAME_FTP_PASSWORD }}
-        run: bash scripts/upload-easyname.sh Gehsteigbreiten
+        run: |
+          chmod +x .github/scripts/lftp-upload.sh
+          .github/scripts/lftp-upload.sh dist/sidewalk_widths.pmtiles Gehsteigbreiten/sidewalk_widths.pmtiles
+          .github/scripts/lftp-upload.sh dist/sidewalk_widths_summary.json Gehsteigbreiten/sidewalk_widths_summary.json
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
