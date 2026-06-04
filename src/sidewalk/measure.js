@@ -5,6 +5,7 @@ import { dist, lerp, ensureClosedRing } from '../geom/basic.js';
 import { lineGeometryInsideIntervals, mergeIntervals } from '../geom/linePolygonIntervals.js';
 import { querySisIndex } from '../io/sisIndex.js';
 import { widthClass } from './classes.js';
+import { classifyMeasurementContext } from './areaClassification.js';
 import { groupMeasurements, linePassesPointValidator } from './segments.js';
 
 export function measureFmzkFeature({ feature, sisDb, config }) {
@@ -106,7 +107,7 @@ function measureStation({ station, sisCandidates, config }) {
 		const dy = mid[1] - station.point[1];
 		const inwardDistanceM = dx * station.normalX + dy * station.normalY;
 
-		measured.push({
+		const base = {
 			point: mid,
 			chainM: station.chainM,
 			widthM,
@@ -118,6 +119,11 @@ function measureStation({ station, sisCandidates, config }) {
 			directionDeltaDeg: round(station.directionDeltaDeg, 2),
 			directionSpreadDeg: round(station.directionSpreadDeg, 2),
 			sisPartsCount: parts
+		};
+
+		measured.push({
+			...base,
+			...classifyMeasurementContext(base)
 		});
 	}
 
