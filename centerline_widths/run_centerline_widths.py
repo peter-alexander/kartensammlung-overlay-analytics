@@ -7,7 +7,7 @@ from urllib.request import urlretrieve
 
 import geopandas as gpd
 import pygeoops
-from shapely.geometry import LineString, MultiLineString, Point
+from shapely.geometry import LineString, MultiLineString
 from shapely.ops import unary_union
 from shapely import make_valid
 
@@ -41,6 +41,7 @@ def main():
 		'centerline_ok': 0,
 		'centerline_failed': 0,
 		'centerline_parts': 0,
+		'centerline_post_simplified': 0,
 		'stations': 0,
 		'measurements': 0,
 		'output_segments': 0,
@@ -74,6 +75,7 @@ def main():
 				extend=config['centerline']['extend']
 			)
 			lines = explode_lines(cl)
+			lines = postprocess_centerlines(lines, config, summary)
 			lines = [l for l in lines if l.length >= config['centerline']['min_line_length_m']]
 			summary['centerline_ok'] += 1
 		except Exception as exc:
@@ -91,7 +93,8 @@ def main():
 					'fmzk_id': fmzk_id,
 					'part_index': part_index,
 					'length_m': round(line.length, 2),
-					'source': 'pygeoops.centerline'
+					'source': 'pygeoops.centerline',
+					'post_simplify_tolerance_m': config['centerline'].get('post_simplify_tolerance_m', 0)
 				}
 			})
 
@@ -154,6 +157,33 @@ def prepare_centerline_geom(geom, config):
 		g = g.simplify(tol, preserve_topology=True)
 		g = make_valid(g)
 	return g
+
+
+def postprocess_centerlines(lines, config, summary):
+	tol = config['centerline'].get('post_simplify_tolerance_m', 0)
+	preserve = config['centerline'].get('post_simplify_preserve_topology', False)
+	if not tol or tol <= 0:
+		return lines
+
+	out = []
+	for line in lines:
+		if line is None or line.is_empty or line.length <= 0:
+			continue
+		simplified = line.simplify(tol, preserve_topology=preserve)
+		if simplified is None or simplified.is_empty:
+			out.append(line)
+			continue
+		simplified_lines = explode_lines(simplified)
+		if not simplified_lines:
+			out.append(line)
+			continue
+		for item in simplified_lines:
+			if item.length <= 0:
+				continue
+			out.append(item)
+			if len(item.coords) < len(line.coords) or abs(item.length - line.length) > 0.01:
+				summary['centerline_post_simplified'] += 1
+	return out
 
 
 def explode_lines(geom):
