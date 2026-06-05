@@ -70,7 +70,7 @@
 	],
 	"pmtiles": {
 		"layer_name": "centerline_widths",
-		"min_zoom": 12,
+		"min_zoom": null,
 		"max_zoom": 17,
 		"base_zoom": 14
 	}
