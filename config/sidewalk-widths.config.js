@@ -55,7 +55,7 @@ export default {
 	],
 	pmtiles: {
 		layerName: 'sidewalk_widths',
-		minZoom: 12,
+		minZoom: null,
 		maxZoom: 17,
 		baseZoom: 14
 	}
