@@ -2,6 +2,7 @@
 import argparse
 import json
 import math
+import random
 from pathlib import Path
 from urllib.request import urlretrieve
 
@@ -58,17 +59,23 @@ def main():
 			summary['skipped'] += 1
 			continue
 
+		surface_type = props.get('TYPE')
+		
 		try:
-			w1 = method_1_circle_from_area(area_m2)
+			d_c = minimum_enclosing_circle_diameter(geom)
+			w1 = tu_method_1_width(surface_type, area_m2, d_c)
 			summary['method_1_ok'] += 1
 		except Exception as exc:
+			d_c = None
 			w1 = None
 			add_error(summary, exc)
-
+		
 		try:
-			w2, m2_point = method_2_largest_inscribed_circle_approx(geom, config)
+			d_i, m2_point = method_2_largest_inscribed_circle_approx(geom, config)
+			w2 = tu_method_2_width(surface_type, area_m2, d_i)
 			summary['method_2_ok'] += 1
 		except Exception as exc:
+			d_i = None
 			w2 = None
 			m2_point = None
 			add_error(summary, exc)
@@ -82,6 +89,8 @@ def main():
 				'type_txt': props.get('TYPE_TXT'),
 				'area_m2': round(area_m2, 2),
 				'perimeter_m': round(perimeter_m, 2),
+				'd_c': round_or_none(d_c, 2),
+				'd_i': round_or_none(d_i, 2),
 				'w_m1': round_or_none(w1, 2),
 				'w_m2': round_or_none(w2, 2),
 				'width_class_m1': width_class(w1, config['width_classes']) if w1 is not None else None,
@@ -229,10 +238,151 @@ def build_method_3_street_axis_features(sis, config, work_dir, summary):
 	return features
 
 
-def method_1_circle_from_area(area_m2):
-	# TU method 1 approximation: sidewalk width as diameter of an equal-area circle.
-	return 2.0 * math.sqrt(area_m2 / math.pi)
+def minimum_enclosing_circle_diameter(geom):
+	points = []
 
+	for x, y in geom.convex_hull.exterior.coords:
+		points.append((float(x), float(y)))
+
+	if not points:
+		return None
+
+	circle = make_minimum_enclosing_circle(points)
+
+	if circle is None:
+		return None
+
+	return 2.0 * circle[2]
+
+
+def make_minimum_enclosing_circle(points):
+	points = list(dict.fromkeys(points))
+	random.seed(1)
+	random.shuffle(points)
+
+	circle = None
+
+	for i, p in enumerate(points):
+		if circle is None or not point_in_circle(p, circle):
+			circle = make_circle_one_point(points[:i + 1], p)
+
+	return circle
+
+
+def make_circle_one_point(points, p):
+	circle = (p[0], p[1], 0.0)
+
+	for i, q in enumerate(points):
+		if not point_in_circle(q, circle):
+			if circle[2] == 0.0:
+				circle = make_diameter_circle(p, q)
+			else:
+				circle = make_circle_two_points(points[:i + 1], p, q)
+
+	return circle
+
+
+def make_circle_two_points(points, p, q):
+	circle = make_diameter_circle(p, q)
+	left = None
+	right = None
+
+	px, py = p
+	qx, qy = q
+
+	for r in points:
+		if point_in_circle(r, circle):
+			continue
+
+		cross = cross_product(px, py, qx, qy, r[0], r[1])
+		c = make_circumcircle(p, q, r)
+
+		if c is None:
+			continue
+
+		cross_center = cross_product(px, py, qx, qy, c[0], c[1])
+
+		if cross > 0 and (left is None or cross_center > cross_product(px, py, qx, qy, left[0], left[1])):
+			left = c
+		elif cross < 0 and (right is None or cross_center < cross_product(px, py, qx, qy, right[0], right[1])):
+			right = c
+
+	if left is None and right is None:
+		return circle
+	if left is None:
+		return right
+	if right is None:
+		return left
+
+	return left if left[2] <= right[2] else right
+
+
+def make_diameter_circle(p, q):
+	cx = (p[0] + q[0]) / 2.0
+	cy = (p[1] + q[1]) / 2.0
+	r = math.hypot(cx - p[0], cy - p[1])
+	return (cx, cy, r)
+
+
+def make_circumcircle(p, q, r):
+	ax, ay = p
+	bx, by = q
+	cx, cy = r
+
+	d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+
+	if abs(d) < 1e-12:
+		return None
+
+	ux = (
+		(ax * ax + ay * ay) * (by - cy)
+		+ (bx * bx + by * by) * (cy - ay)
+		+ (cx * cx + cy * cy) * (ay - by)
+	) / d
+
+	uy = (
+		(ax * ax + ay * ay) * (cx - bx)
+		+ (bx * bx + by * by) * (ax - cx)
+		+ (cx * cx + cy * cy) * (bx - ax)
+	) / d
+
+	radius = math.hypot(ux - ax, uy - ay)
+	return (ux, uy, radius)
+
+
+def point_in_circle(p, circle):
+	eps = 1e-9
+	return math.hypot(p[0] - circle[0], p[1] - circle[1]) <= circle[2] + eps
+
+
+def cross_product(ax, ay, bx, by, cx, cy):
+	return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+
+def tu_method_1_width(surface_type, area_m2, d_c):
+	if d_c is None or d_c <= 0:
+		return None
+
+	if surface_type == 'GG':
+		return area_m2 / d_c
+
+	if surface_type in ('EE', 'HH'):
+		return d_c
+
+	return area_m2 / d_c
+
+
+def tu_method_2_width(surface_type, area_m2, d_i):
+	if d_i is None or d_i <= 0:
+		return None
+
+	if surface_type == 'GG':
+		return d_i
+
+	if surface_type in ('EE', 'HH'):
+		return area_m2 / d_i
+
+	return d_i
 
 def method_2_largest_inscribed_circle_approx(geom, config):
 	# Approximation of largest inscribed circle:
