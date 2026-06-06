@@ -10,15 +10,4 @@ export default {
 		workDir: 'work/sidewalk-widths',
 		sisIndex: 'work/sidewalk-widths/sis-index.sqlite',
 		metricOutput: 'work/sidewalk-widths/sidewalk_widths_metric.geojsonseq',
-		wgs84Output: 'work/sidewalk-widths/sidewalk_widths_4326.geojsonseq',
-		pmtilesOutput: 'dist/sidewalk_widths.pmtiles',
-		summary: 'dist/sidewalk_widths_summary.json'
-	},
-	sources: {
-		fmzk: {
-			name: 'FMZK Gehsteig Testausschnitt',
-			kind: 'geojson',
-			url: `${TESTDATA_BASE_URL}/FMZKVERKEHR2OGD.json`,
-			filter: {
-				property: 'LAYER',
-	
+		wgs84Output: 'work/sidewalk-widths/sidewalk_widths
