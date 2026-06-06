@@ -1,9 +1,3 @@
 {
-	"method": "directional_tu_widths",
-	"paths": {
-		"workDir": "work/directional-tu-widths",
-		"outputDir": "dist/directional-tu-widths",
-		"metricOutput": "work/directional-tu-widths/directional_surfaces_metric.geojsonseq",
-		"wgs84Output": "work/directional-tu-widths/directional_surfaces_4326.geojsonseq",
-		"pmtilesOutput": "dist/directional-tu-widths/directional_tu_widths.pmtiles",
-		"summary":
+	"method": "directional_tu_widths"
+}
