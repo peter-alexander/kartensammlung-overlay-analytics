@@ -9,4 +9,58 @@
 		"work_dir": "work/tu-method-widths",
 		"output_dir": "dist/tu-method-widths",
 		"surfaces_metric": "work/tu-method-widths/tu_surfaces_metric.geojsonseq",
-		"surfaces_wgs84": "work/tu-method-width
+		"surfaces_wgs84": "work/tu-method-widths/tu_surfaces_4326.geojsonseq",
+		"streets_metric": "work/tu-method-widths/tu_streets_metric.geojsonseq",
+		"streets_wgs84": "work/tu-method-widths/tu_streets_4326.geojsonseq",
+		"pmtiles": "dist/tu-method-widths/tu_method_widths.pmtiles",
+		"summary": "dist/tu-method-widths/tu_method_widths_summary.json"
+	},
+	"sources": {
+		"sis": {
+			"name": "SIS Belagsflächen Testausschnitt",
+			"url": "https://tiles.radlobby.at/Gehsteigbreiten/Testdaten/SISBELAGOGD.json",
+			"filter_property": "TYPE",
+			"filter_values": ["GG", "EE", "HH"]
+		},
+		"street_axis": {
+			"name": "EDGE_OGD Testausschnitt",
+			"url": "https://tiles.radlobby.at/Gehsteigbreiten/Testdaten/Strassengraph.fgb",
+			"enabled": true,
+			"filter": {
+				"baustatus_property": "BAUSTATUS",
+				"baustatus_values": [5],
+				"frc_property": "FRC",
+				"frc_include": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+				"fow_property": "FOW",
+				"fow_exclude": [14, 15, 16, 18, 19, 101, 102, 103, 104, 504, 505, 601, 701]
+			}
+		}
+	},
+	"preprocess": {
+		"make_valid": true,
+		"explode_multipart": true,
+		"min_area_m2": 0.01
+	},
+	"method_2": {
+		"grid_nodes": 21,
+		"iterations": 8,
+		"shrink_factor": 1.41421356237
+	},
+	"method_3": {
+		"enabled": true,
+		"buffer_m": 20.0
+	},
+	"width_classes": [
+		{ "id": 0, "label": "< 1.2 m", "min": null, "max": 1.2 },
+		{ "id": 1, "label": "1.2 m - 1.5 m", "min": 1.2, "max": 1.5 },
+		{ "id": 2, "label": "1.5 m - 2.0 m", "min": 1.5, "max": 2.0 },
+		{ "id": 3, "label": "2.0 m - 3.0 m", "min": 2.0, "max": 3.0 },
+		{ "id": 4, "label": "> 3.0 m", "min": 3.0, "max": null }
+	],
+	"pmtiles": {
+		"layer_name": "tu_method_widths",
+		"min_zoom": 12,
+		"max_zoom": 17,
+		"base_zoom": 14
+	}
+}
