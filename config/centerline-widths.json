@@ -9,4 +9,69 @@
 		"work_dir": "work/centerline-widths",
 		"output_dir": "dist/centerline-widths",
 		"centerlines_metric": "work/centerline-widths/centerlines_metric.geojsonseq",
-		"measurements_metric": "work/centerline-widths/center
+		"measurements_metric": "work/centerline-widths/centerline_widths_metric.geojsonseq",
+		"measurements_wgs84": "work/centerline-widths/centerline_widths_4326.geojsonseq",
+		"pmtiles": "dist/centerline-widths/centerline_widths.pmtiles",
+		"summary": "dist/centerline-widths/centerline_widths_summary.json"
+	},
+	"sources": {
+		"fmzk": {
+			"name": "FMZK Gehsteig Testausschnitt",
+			"url": "https://${EASYNAME_HTTP_HOST}/Gehsteigbreiten/Testdaten/FMZKVERKEHR2OGD.json",
+			"filter_property": "LAYER",
+			"filter_values": ["Gehsteig"]
+		},
+		"sis": {
+			"name": "SIS Belagsflächen Testausschnitt",
+			"url": "https://${EASYNAME_HTTP_HOST}/Gehsteigbreiten/Testdaten/SISBELAGOGD.json",
+			"filter_property": "TYPE",
+			"filter_values": ["GG", "EE", "HH"]
+		}
+	},
+	"centerline": {
+		"source": "fmzk",
+		"make_valid": true,
+		"explode_multipart": true,
+		"min_area_m2": 0.25,
+		"simplify_tolerance_m": 0.05,
+		"densify_distance": -1,
+		"min_branch_length": -2,
+		"simplifytolerance": -0.25,
+		"extend": true,
+		"min_line_length_m": 1.0,
+		"keep_branches": true,
+		"merge_connected_lines": true,
+		"post_simplify_tolerance_m": 0.25,
+		"post_simplify_preserve_topology": false,
+		"straighten_nearly_linear": true,
+		"straighten_min_length_m": 8.0,
+		"straighten_max_deviation_m": 3.0,
+		"straighten_max_length_ratio": 2.5,
+		"straight_simplify_nearly_linear": true,
+		"straight_simplify_tolerance_m": 2.5,
+		"straight_simplify_max_hausdorff_m": 3.0,
+		"straight_simplify_min_reduction": 2
+	},
+	"measurement": {
+		"step_m": 1.0,
+		"cross_section_half_length_m": 30.0,
+		"min_width_m": 0.2,
+		"simplify_tolerance_m": 0.2,
+		"max_station_gap_m": 2.5,
+		"output_validation_sample_step_m": 0.5,
+		"output_geometry": "centerline_when_inside_sis"
+	},
+	"width_classes": [
+		{ "id": 0, "label": "< 1.2 m", "min": null, "max": 1.2 },
+		{ "id": 1, "label": "1.2 m - 1.5 m", "min": 1.2, "max": 1.5 },
+		{ "id": 2, "label": "1.5 m - 2.0 m", "min": 1.5, "max": 2.0 },
+		{ "id": 3, "label": "2.0 m - 3.0 m", "min": 2.0, "max": 3.0 },
+		{ "id": 4, "label": "> 3.0 m", "min": 3.0, "max": null }
+	],
+	"pmtiles": {
+		"layer_name": "centerline_widths",
+		"min_zoom": null,
+		"max_zoom": 17,
+		"base_zoom": 14
+	}
+}
