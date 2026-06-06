@@ -9,4 +9,5 @@
 		"workDir": "work/directional-tu-widths",
 		"outputDir": "dist/directional-tu-widths",
 		"metricOutput": "work/directional-tu-widths/directional_surfaces_metric.geojsonseq",
-		"wgs84Output": "work/directional-tu-widths/d
+		"wgs84Output": "work/directional-tu-widths/directional_surfaces_4326.geojsonseq",
+		"pmtiles
