@@ -42,6 +42,7 @@ jobs:
       - name: Transform output to WGS84
         run: |
           mkdir -p work/tu-method-widths dist/tu-method-widths
+
           if [ -s work/tu-method-widths/tu_surfaces_metric.geojsonseq ]; then
             ogr2ogr -f GeoJSONSeq \
               -s_srs EPSG:31256 \
@@ -49,23 +50,42 @@ jobs:
               work/tu-method-widths/tu_surfaces_4326.geojsonseq \
               work/tu-method-widths/tu_surfaces_metric.geojsonseq
           else
-            echo "No TU surfaces generated; skipping transform."
+            echo "No TU surfaces generated; skipping surfaces transform."
+          fi
+
+          if [ -s work/tu-method-widths/tu_streets_metric.geojsonseq ]; then
+            ogr2ogr -f GeoJSONSeq \
+              -s_srs EPSG:31256 \
+              -t_srs EPSG:4326 \
+              work/tu-method-widths/tu_streets_4326.geojsonseq \
+              work/tu-method-widths/tu_streets_metric.geojsonseq
+          else
+            echo "No TU streets generated; skipping streets transform."
           fi
 
       - name: Build PMTiles
         run: |
+          TIPPECANOE_INPUTS=()
+
           if [ -s work/tu-method-widths/tu_surfaces_4326.geojsonseq ]; then
+            TIPPECANOE_INPUTS+=("-L" "tu_surfaces:work/tu-method-widths/tu_surfaces_4326.geojsonseq")
+          fi
+
+          if [ -s work/tu-method-widths/tu_streets_4326.geojsonseq ]; then
+            TIPPECANOE_INPUTS+=("-L" "tu_streets:work/tu-method-widths/tu_streets_4326.geojsonseq")
+          fi
+
+          if [ "${#TIPPECANOE_INPUTS[@]}" -gt 0 ]; then
             tippecanoe \
               -o dist/tu-method-widths/tu_method_widths.pmtiles \
               --force \
-              --layer tu_method_widths \
               --minimum-zoom 12 \
               --maximum-zoom 17 \
               --base-zoom 14 \
               --drop-densest-as-needed \
-              work/tu-method-widths/tu_surfaces_4326.geojsonseq
+              "${TIPPECANOE_INPUTS[@]}"
           else
-            echo "No WGS84 TU surfaces generated; skipping PMTiles."
+            echo "No WGS84 TU outputs generated; skipping PMTiles."
           fi
 
       - name: Upload PMTiles to Easyname
