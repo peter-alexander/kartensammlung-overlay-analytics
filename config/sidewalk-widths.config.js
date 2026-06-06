@@ -1,3 +1,5 @@
+const TESTDATA_BASE_URL = `https://${process.env.EASYNAME_HTTP_HOST || 'tiles.radlobby.at'}/Gehsteigbreiten/Testdaten`;
+
 export default {
 	method: 'fmzk_guided_sis_multiband_cross_v1',
 	crs: {
@@ -16,47 +18,7 @@ export default {
 		fmzk: {
 			name: 'FMZK Gehsteig Testausschnitt',
 			kind: 'geojson',
-			url: 'https://fahrrad.lima-city.de/Gehsteigbreiten-Testdaten/FMZKVERKEHR2OGD.json',
+			url: `${TESTDATA_BASE_URL}/FMZKVERKEHR2OGD.json`,
 			filter: {
 				property: 'LAYER',
-				values: ['Gehsteig']
-			}
-		},
-		sis: {
-			name: 'SIS Belagsflächen Testausschnitt',
-			kind: 'geojson',
-			url: 'https://fahrrad.lima-city.de/Gehsteigbreiten-Testdaten/SISBELAGOGD.json',
-			typeProperty: 'TYPE',
-			allowedTypes: ['GG', 'EE', 'HH']
-		}
-	},
-	measurement: {
-		stepM: 1.0,
-		crossSectionHalfLengthM: 30.0,
-		innerProbeM: 0.08,
-		stationMarginM: 0.5,
-		minWidthM: 0.2,
-		fmzkSisSearchBufferM: 1.0,
-		directionWindowStations: 3,
-		directionOutlierDeg: 45,
-		directionHardOutlierDeg: 70,
-		directionStableSpreadDeg: 25,
-		simplifyToleranceM: 0.2,
-		maxStationGapM: 2.5,
-		outputValidationSampleStepM: 0.5,
-		bandTrackingMaxDistanceM: 2.0
-	},
-	widthClasses: [
-		{ id: 0, label: '< 1.2 m', min: null, max: 1.2 },
-		{ id: 1, label: '1.2 m - 1.5 m', min: 1.2, max: 1.5 },
-		{ id: 2, label: '1.5 m - 2.0 m', min: 1.5, max: 2.0 },
-		{ id: 3, label: '2.0 m - 3.0 m', min: 2.0, max: 3.0 },
-		{ id: 4, label: '> 3.0 m', min: 3.0, max: null }
-	],
-	pmtiles: {
-		layerName: 'sidewalk_widths',
-		minZoom: null,
-		maxZoom: 17,
-		baseZoom: 14
-	}
-};
+	
