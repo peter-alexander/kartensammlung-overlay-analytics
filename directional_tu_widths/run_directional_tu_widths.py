@@ -69,8 +69,11 @@ def main():
 		'direction_street_axis': 0,
 		'direction_polygon_axis': 0,
 		'direction_longest_edge': 0,
+		'street_axis_rejected_by_angle': 0,
 		'width_below_min': 0,
 		'width_above_max': 0,
+		'width_below_min_by_source': source_count_summary(),
+		'width_above_max_by_source': source_count_summary(),
 		'errors': {}
 	}
 
@@ -86,7 +89,10 @@ def main():
 		source_type = props.get('TYPE') or props.get('type')
 
 		try:
-			direction = choose_direction(geom, centerline_index, street_index, config)
+			area_m2 = float(geom.area)
+			perimeter_m = float(geom.length)
+			polygon_axis_angle = minimum_rectangle_axis_angle(geom)
+			direction = choose_direction(geom, centerline_index, street_index, config, polygon_axis_angle)
 			coords = polygon_coords(geom)
 			width_m = directional_width(coords, direction['angle_rad'])
 			width_cls = width_class(width_m, config['width_classes'])
@@ -97,21 +103,30 @@ def main():
 
 		if width_m < config['direction']['min_width_m']:
 			summary['width_below_min'] += 1
+			increment_source_count(summary['width_below_min_by_source'], direction['source'])
 		if width_m > config['direction']['max_width_m']:
 			summary['width_above_max'] += 1
+			increment_source_count(summary['width_above_max_by_source'], direction['source'])
 
 		summary_key = f"direction_{direction['source']}"
 		if summary_key in summary:
 			summary[summary_key] += 1
+		if direction.get('street_axis_rejected_by_angle'):
+			summary['street_axis_rejected_by_angle'] += 1
 
 		rows.append({
 			'geometry': geom,
 			'method': config['method'],
+			'area_m2': round(area_m2, 2),
+			'perimeter_m': round(perimeter_m, 2),
+			'polygon_axis_angle_deg': angle_deg_or_none(polygon_axis_angle, 2),
 			'width_m': round(width_m, 2),
 			'width_class': width_cls,
 			'direction_source': direction['source'],
 			'direction_angle_deg': round(math.degrees(direction['angle_rad']), 2),
 			'direction_distance_m': round_or_none(direction['distance_m'], 2),
+			'street_axis_angle_deg': angle_deg_or_none(direction.get('street_axis_angle_rad'), 2),
+			'angle_diff_deg': round_or_none(direction.get('angle_diff_deg'), 2),
 			'source_type': source_type,
 			'source_id': source_id
 		})
@@ -139,6 +154,7 @@ def normalize_config(config):
 	config['direction'].setdefault('min_width_m', 0.2)
 	config['direction'].setdefault('max_width_m', 8.0)
 	config['direction'].setdefault('tangent_delta_m', 2.0)
+	config['direction'].setdefault('max_street_axis_angle_diff_deg', 45.0)
 
 	config['paths'].setdefault('surfaces_wgs84', 'work/directional-tu-widths/directional_surfaces_4326.geojsonseq')
 	return config
@@ -308,18 +324,24 @@ def make_direction_index(gdf, source_name, search_m, id_keys):
 	}
 
 
-def choose_direction(geom, centerline_index, street_index, config):
+def choose_direction(geom, centerline_index, street_index, config, polygon_axis_angle):
 	if centerline_index is not None:
 		match = nearest_direction(geom, centerline_index, config)
 		if match is not None:
 			return match
 
 	if street_index is not None:
-		match = nearest_direction(geom, street_index, config)
+		match, rejected = nearest_street_direction(geom, street_index, config, polygon_axis_angle)
 		if match is not None:
 			return match
+		if rejected is not None:
+			fallback = fallback_direction(geom, polygon_axis_angle)
+			fallback['street_axis_rejected_by_angle'] = True
+			fallback['street_axis_angle_rad'] = rejected['street_axis_angle_rad']
+			fallback['angle_diff_deg'] = rejected['angle_diff_deg']
+			return fallback
 
-	return fallback_direction(geom)
+	return fallback_direction(geom, polygon_axis_angle)
 
 
 def nearest_direction(geom, direction_index, config):
@@ -350,6 +372,51 @@ def nearest_direction(geom, direction_index, config):
 			}
 
 	return best
+
+
+def nearest_street_direction(geom, direction_index, config, polygon_axis_angle):
+	if polygon_axis_angle is None:
+		return None, None
+
+	search_geom = geom.buffer(direction_index['search_m'])
+	candidate_indices = query_spatial_index(direction_index['sindex'], search_geom)
+	if len(candidate_indices) == 0:
+		return None, None
+
+	best = None
+	best_rejected = None
+	max_angle_diff = float(config['direction']['max_street_axis_angle_diff_deg'])
+	for raw_idx in candidate_indices:
+		idx = int(raw_idx)
+		row = direction_index['gdf'].iloc[idx]
+		line = row.geometry
+		distance = geom.distance(line)
+		if distance > direction_index['search_m']:
+			continue
+
+		angle = line_direction_near(line, geom, config['direction']['tangent_delta_m'])
+		if angle is None:
+			continue
+
+		angle_diff = axis_angle_diff_deg(angle, polygon_axis_angle)
+		candidate = {
+			'source': direction_index['source_name'],
+			'angle_rad': angle,
+			'distance_m': distance,
+			'source_id': direction_source_id(row_props(row), idx, direction_index['id_keys']),
+			'street_axis_angle_rad': angle,
+			'angle_diff_deg': angle_diff
+		}
+
+		if angle_diff > max_angle_diff:
+			if best_rejected is None or distance < best_rejected['distance_m']:
+				best_rejected = candidate
+			continue
+
+		if best is None or distance < best['distance_m']:
+			best = candidate
+
+	return best, best_rejected
 
 
 def query_spatial_index(sindex, geom):
@@ -396,8 +463,10 @@ def tangent_at(line, s, delta):
 	return (dx / n, dy / n)
 
 
-def fallback_direction(geom):
-	angle = minimum_rectangle_axis_angle(geom)
+def fallback_direction(geom, polygon_axis_angle=None):
+	angle = polygon_axis_angle
+	if angle is None:
+		angle = minimum_rectangle_axis_angle(geom)
 	if angle is not None:
 		return {
 			'source': 'polygon_axis',
@@ -501,6 +570,19 @@ def normalize_axis_angle(angle):
 	return angle
 
 
+def axis_angle_diff_deg(a, b):
+	diff = abs(normalize_axis_angle(a) - normalize_axis_angle(b))
+	if diff > math.pi / 2:
+		diff = math.pi - diff
+	return math.degrees(diff)
+
+
+def angle_deg_or_none(value, digits):
+	if value is None:
+		return None
+	return round(math.degrees(float(value)), digits)
+
+
 def polygon_coords(geom):
 	coords = []
 	for poly in iter_polygons(geom):
@@ -535,6 +617,19 @@ def width_class(width, classes):
 		if (min_v is None or width >= min_v) and (max_v is None or width < max_v):
 			return cls['id']
 	return None
+
+
+def source_count_summary():
+	return {
+		'centerline': 0,
+		'street_axis': 0,
+		'polygon_axis': 0,
+		'longest_edge': 0
+	}
+
+
+def increment_source_count(counts, source):
+	counts[source] = counts.get(source, 0) + 1
 
 
 def source_feature_id(props, fallback):
@@ -609,11 +704,16 @@ def output_geodataframe(rows, crs):
 	return gpd.GeoDataFrame(
 		columns=[
 			'method',
+			'area_m2',
+			'perimeter_m',
+			'polygon_axis_angle_deg',
 			'width_m',
 			'width_class',
 			'direction_source',
 			'direction_angle_deg',
 			'direction_distance_m',
+			'street_axis_angle_deg',
+			'angle_diff_deg',
 			'source_type',
 			'source_id',
 			'geometry'
