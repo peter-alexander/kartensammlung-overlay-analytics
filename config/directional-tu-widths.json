@@ -15,17 +15,22 @@
 	},
 	"sources": {
 		"sis": {
+			"name": "SIS Belagsflaechen Testausschnitt",
 			"url": "https://tiles.radlobby.at/Gehsteigbreiten/Testdaten/SISBELAGOGD.json",
 			"filter_property": "TYPE",
 			"filter_values": ["GG", "EE", "HH"]
 		},
 		"centerlines": {
+			"name": "Centerlines Testausschnitt",
 			"url": "https://tiles.radlobby.at/Gehsteigbreiten/Testdaten/centerlines_metric.geojsonseq",
+			"crs": "EPSG:31256",
 			"enabled": false
 		},
 		"street_axis": {
+			"name": "EDGE_OGD Testausschnitt",
 			"url": "https://tiles.radlobby.at/Gehsteigbreiten/Testdaten/Strassengraph.fgb",
 			"enabled": true,
+			"crs": "EPSG:4326",
 			"filter": {
 				"baustatus_property": "BAUSTATUS",
 				"baustatus_values": [5],
@@ -36,11 +41,18 @@
 			}
 		}
 	},
+	"preprocess": {
+		"make_valid": true,
+		"explode_multipart": true,
+		"min_area_m2": 0.01
+	},
 	"direction": {
 		"centerline_search_m": 3.0,
 		"street_search_m": 25.0,
+		"max_street_axis_angle_diff_deg": 45.0,
 		"max_width_m": 8.0,
 		"min_width_m": 0.2,
+		"tangent_delta_m": 2.0,
 		"use_directional_width": true
 	},
 	"width_classes": [

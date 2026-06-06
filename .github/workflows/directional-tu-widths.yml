@@ -1,0 +1,77 @@
+name: Build directional_tu_widths
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: Path to directional TU widths config
+        required: true
+        default: config/directional-tu-widths.json
+        type: string
+      upload_pmtiles:
+        description: Upload PMTiles to Easyname FTP
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin tippecanoe lftp
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-directional-tu-widths.txt
+
+      - name: Build directional TU widths
+        run: python directional_tu_widths/run_directional_tu_widths.py --config "${{ inputs.config_path }}"
+
+      - name: Build PMTiles
+        run: |
+          if [ -s work/directional-tu-widths/directional_surfaces_4326.geojsonseq ]; then
+            tippecanoe \
+              -o dist/directional-tu-widths/directional_tu_widths.pmtiles \
+              --force \
+              --layer directional_surfaces \
+              --minimum-zoom 12 \
+              --maximum-zoom 17 \
+              --base-zoom 14 \
+              --drop-densest-as-needed \
+              work/directional-tu-widths/directional_surfaces_4326.geojsonseq
+          else
+            echo "No WGS84 directional surfaces generated; skipping PMTiles."
+          fi
+
+      - name: Upload PMTiles to Easyname
+        if: ${{ inputs.upload_pmtiles }}
+        env:
+          EASYNAME_FTP_HOST: ${{ secrets.EASYNAME_FTP_HOST }}
+          EASYNAME_FTP_USER: ${{ secrets.EASYNAME_FTP_USER }}
+          EASYNAME_FTP_PASSWORD: ${{ secrets.EASYNAME_FTP_PASSWORD }}
+        run: |
+          test -f dist/directional-tu-widths/directional_tu_widths.pmtiles
+          chmod +x .github/scripts/lftp-upload.sh
+          .github/scripts/lftp-upload.sh dist/directional-tu-widths/directional_tu_widths.pmtiles Gehsteigbreiten/directional_tu_widths.pmtiles
+          .github/scripts/lftp-upload.sh dist/directional-tu-widths/directional_tu_widths_summary.json Gehsteigbreiten/directional_tu_widths_summary.json
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: directional-tu-widths
+          path: |
+            dist/directional-tu-widths/
+            work/directional-tu-widths/*.geojsonseq
+          if-no-files-found: error
