@@ -80,6 +80,30 @@ def main():
 			m2_point = None
 			add_error(summary, exc)
 
+		w_tu = w2
+		width_class_m1 = width_class(w1, config['width_classes']) if w1 is not None else None
+		width_class_m2 = width_class(w2, config['width_classes']) if w2 is not None else None
+		width_class_tu = width_class_m2
+		
+		if w1 is not None and w2 is not None:
+			m1_m2_diff_m = abs(w1 - w2)
+		else:
+			m1_m2_diff_m = None
+		
+		if width_class_m1 is not None and width_class_m2 is not None:
+			m1_m2_class_diff = abs(width_class_m1 - width_class_m2)
+		else:
+			m1_m2_class_diff = None
+		
+		if m1_m2_class_diff is None:
+			tu_quality = 'unknown'
+		elif m1_m2_class_diff == 0:
+			tu_quality = 'ok'
+		elif m1_m2_class_diff == 1:
+			tu_quality = 'uncertain'
+		else:
+			tu_quality = 'conflict'
+
 		surface_features.append({
 			'type': 'Feature',
 			'geometry': geom.__geo_interface__,
@@ -91,10 +115,23 @@ def main():
 				'perimeter_m': round(perimeter_m, 2),
 				'd_c': round_or_none(d_c, 2),
 				'd_i': round_or_none(d_i, 2),
+				'd_c': round_or_none(d_c, 2),
+				'd_i': round_or_none(d_i, 2),
+				
 				'w_m1': round_or_none(w1, 2),
 				'w_m2': round_or_none(w2, 2),
-				'width_class_m1': width_class(w1, config['width_classes']) if w1 is not None else None,
-				'width_class_m2': width_class(w2, config['width_classes']) if w2 is not None else None,
+				
+				'width_class_m1': width_class_m1,
+				'width_class_m2': width_class_m2,
+				
+				'w_tu': round_or_none(w_tu, 2),
+				'width_class_tu': width_class_tu,
+				'tu_method': 'm2',
+				
+				'm1_m2_diff_m': round_or_none(m1_m2_diff_m, 2),
+				'm1_m2_class_diff': m1_m2_class_diff,
+				'tu_quality': tu_quality,
+				
 				'method': config['method']
 			}
 		})
