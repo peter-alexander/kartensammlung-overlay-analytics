@@ -1,13 +1,9 @@
 {
 	"method": "directional_tu_widths",
-	"crs": {
-		"input": "EPSG:4326",
-		"metric": "EPSG:31256",
-		"pmtiles": "EPSG:4326"
-	},
 	"paths": {
 		"workDir": "work/directional-tu-widths",
 		"outputDir": "dist/directional-tu-widths",
 		"metricOutput": "work/directional-tu-widths/directional_surfaces_metric.geojsonseq",
 		"wgs84Output": "work/directional-tu-widths/directional_surfaces_4326.geojsonseq",
-		"pmtiles
+		"pmtilesOutput": "dist/directional-tu-widths/directional_tu_widths.pmtiles",
+		"summary":
