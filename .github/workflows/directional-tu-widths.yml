@@ -36,6 +36,9 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements-directional-tu-widths.txt
 
+      - name: Build centerlines
+        run: python directional_tu_widths/build_centerlines.py --config "${{ inputs.config_path }}"
+
       - name: Build directional TU widths
         run: python directional_tu_widths/run_directional_tu_widths.py --config "${{ inputs.config_path }}"
 

@@ -69,7 +69,6 @@ def main():
 		'direction_street_axis': 0,
 		'direction_polygon_axis': 0,
 		'direction_longest_edge': 0,
-		'street_axis_rejected_by_angle': 0,
 		'width_below_min': 0,
 		'width_above_max': 0,
 		'width_below_min_by_source': source_count_summary(),
@@ -111,8 +110,6 @@ def main():
 		summary_key = f"direction_{direction['source']}"
 		if summary_key in summary:
 			summary[summary_key] += 1
-		if direction.get('street_axis_rejected_by_angle'):
-			summary['street_axis_rejected_by_angle'] += 1
 
 		rows.append({
 			'geometry': geom,
@@ -154,7 +151,6 @@ def normalize_config(config):
 	config['direction'].setdefault('min_width_m', 0.2)
 	config['direction'].setdefault('max_width_m', 8.0)
 	config['direction'].setdefault('tangent_delta_m', 2.0)
-	config['direction'].setdefault('max_street_axis_angle_diff_deg', 45.0)
 
 	config['paths'].setdefault('surfaces_wgs84', 'work/directional-tu-widths/directional_surfaces_4326.geojsonseq')
 	return config
@@ -229,7 +225,9 @@ def read_geodataframe(path, config, source_cfg, assumed_crs):
 			raise exc
 
 	source_crs = source_cfg.get('crs') or assumed_crs
-	if gdf.crs is None:
+	if source_cfg.get('crs'):
+		gdf = gdf.set_crs(source_crs, allow_override=True)
+	elif gdf.crs is None:
 		gdf = gdf.set_crs(source_crs)
 
 	return gdf.to_crs(config['crs']['metric'])
@@ -326,25 +324,19 @@ def make_direction_index(gdf, source_name, search_m, id_keys):
 
 def choose_direction(geom, centerline_index, street_index, config, polygon_axis_angle):
 	if centerline_index is not None:
-		match = nearest_direction(geom, centerline_index, config)
+		match = nearest_direction(geom, centerline_index, config, polygon_axis_angle)
 		if match is not None:
 			return match
 
 	if street_index is not None:
-		match, rejected = nearest_street_direction(geom, street_index, config, polygon_axis_angle)
+		match = nearest_direction(geom, street_index, config, polygon_axis_angle)
 		if match is not None:
 			return match
-		if rejected is not None:
-			fallback = fallback_direction(geom, polygon_axis_angle)
-			fallback['street_axis_rejected_by_angle'] = True
-			fallback['street_axis_angle_rad'] = rejected['street_axis_angle_rad']
-			fallback['angle_diff_deg'] = rejected['angle_diff_deg']
-			return fallback
 
 	return fallback_direction(geom, polygon_axis_angle)
 
 
-def nearest_direction(geom, direction_index, config):
+def nearest_direction(geom, direction_index, config, polygon_axis_angle=None):
 	search_geom = geom.buffer(direction_index['search_m'])
 	candidate_indices = query_spatial_index(direction_index['sindex'], search_geom)
 	if len(candidate_indices) == 0:
@@ -370,53 +362,12 @@ def nearest_direction(geom, direction_index, config):
 				'distance_m': distance,
 				'source_id': direction_source_id(row_props(row), idx, direction_index['id_keys'])
 			}
+			if direction_index['source_name'] == 'street_axis':
+				best['street_axis_angle_rad'] = angle
+				if polygon_axis_angle is not None:
+					best['angle_diff_deg'] = axis_angle_diff_deg(angle, polygon_axis_angle)
 
 	return best
-
-
-def nearest_street_direction(geom, direction_index, config, polygon_axis_angle):
-	if polygon_axis_angle is None:
-		return None, None
-
-	search_geom = geom.buffer(direction_index['search_m'])
-	candidate_indices = query_spatial_index(direction_index['sindex'], search_geom)
-	if len(candidate_indices) == 0:
-		return None, None
-
-	best = None
-	best_rejected = None
-	max_angle_diff = float(config['direction']['max_street_axis_angle_diff_deg'])
-	for raw_idx in candidate_indices:
-		idx = int(raw_idx)
-		row = direction_index['gdf'].iloc[idx]
-		line = row.geometry
-		distance = geom.distance(line)
-		if distance > direction_index['search_m']:
-			continue
-
-		angle = line_direction_near(line, geom, config['direction']['tangent_delta_m'])
-		if angle is None:
-			continue
-
-		angle_diff = axis_angle_diff_deg(angle, polygon_axis_angle)
-		candidate = {
-			'source': direction_index['source_name'],
-			'angle_rad': angle,
-			'distance_m': distance,
-			'source_id': direction_source_id(row_props(row), idx, direction_index['id_keys']),
-			'street_axis_angle_rad': angle,
-			'angle_diff_deg': angle_diff
-		}
-
-		if angle_diff > max_angle_diff:
-			if best_rejected is None or distance < best_rejected['distance_m']:
-				best_rejected = candidate
-			continue
-
-		if best is None or distance < best['distance_m']:
-			best = candidate
-
-	return best, best_rejected
 
 
 def query_spatial_index(sindex, geom):
