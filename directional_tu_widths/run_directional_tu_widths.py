@@ -117,24 +117,7 @@ def main():
 		})
 		summary['processed'] += 1
 
-	if rows:
-		output = gpd.GeoDataFrame(rows, geometry='geometry', crs=config['crs']['metric'])
-	else:
-		output = gpd.GeoDataFrame(
-			columns=[
-				'method',
-				'width_m',
-				'width_class',
-				'direction_source',
-				'direction_angle_deg',
-				'direction_distance_m',
-				'source_type',
-				'source_id',
-				'geometry'
-			],
-			geometry='geometry',
-			crs=config['crs']['metric']
-		)
+	output = output_geodataframe(rows, config['crs']['metric'])
 	write_geojsonseq_gdf(paths['surfaces_metric'], output)
 	write_geojsonseq_gdf(paths['surfaces_wgs84'], output.to_crs(config['crs']['pmtiles']))
 
@@ -214,12 +197,20 @@ def load_prepare_lines(path, config, source_cfg, assumed_crs):
 def read_geodataframe(path, config, source_cfg, assumed_crs):
 	try:
 		gdf = gpd.read_file(path)
-	except Exception:
+	except Exception as exc:
 		if Path(path).suffix.lower() != '.fgb':
 			raise
 		converted = Path(path).with_suffix('.geojsonseq')
-		run_ogr2ogr(path, converted)
-		gdf = gpd.read_file(converted)
+		try:
+			run_ogr2ogr(path, converted)
+		except FileNotFoundError as ogr_exc:
+			raise RuntimeError('ogr2ogr is required when GeoPandas cannot read the FGB source directly') from ogr_exc
+		except subprocess.CalledProcessError as ogr_exc:
+			raise RuntimeError('ogr2ogr failed while converting the FGB source') from ogr_exc
+		try:
+			gdf = gpd.read_file(converted)
+		except Exception:
+			raise exc
 
 	source_crs = source_cfg.get('crs') or assumed_crs
 	if gdf.crs is None:
@@ -249,4 +240,410 @@ def filter_street_axis(gdf, source_cfg):
 	baustatus_property = filter_cfg.get('baustatus_property')
 	baustatus_values = filter_cfg.get('baustatus_values')
 	if baustatus_property and baustatus_values and baustatus_property in gdf.columns:
-		gdf = gdfmÆÈ‹j◊ù
+		gdf = gdf[gdf[baustatus_property].isin(baustatus_values)].copy()
+
+	frc_property = filter_cfg.get('frc_property')
+	frc_include = filter_cfg.get('frc_include')
+	if frc_property and frc_include and frc_property in gdf.columns:
+		gdf = gdf[gdf[frc_property].isin(frc_include)].copy()
+
+	fow_property = filter_cfg.get('fow_property')
+	fow_exclude = filter_cfg.get('fow_exclude')
+	if fow_property and fow_exclude and fow_property in gdf.columns:
+		gdf = gdf[~gdf[fow_property].isin(fow_exclude)].copy()
+
+	return gdf.reset_index(drop=True)
+
+
+def valid_or_empty(geom):
+	if geom is None or geom.is_empty:
+		return geom
+	return make_valid(geom)
+
+
+def explode_lines_gdf(gdf, crs):
+	rows = []
+	for idx, row in gdf.iterrows():
+		props = row_props(row)
+		for line in explode_lines(row.geometry):
+			if line.length <= 0:
+				continue
+			item = dict(props)
+			item['geometry'] = line
+			item['_source_index'] = idx
+			rows.append(item)
+
+	if not rows:
+		return gpd.GeoDataFrame(geometry=[], crs=crs)
+
+	return gpd.GeoDataFrame(rows, geometry='geometry', crs=crs)
+
+
+def explode_lines(geom):
+	if geom is None or geom.is_empty:
+		return []
+	if isinstance(geom, LineString):
+		return [geom]
+	if isinstance(geom, MultiLineString):
+		return list(geom.geoms)
+	if hasattr(geom, 'geoms'):
+		out = []
+		for part in geom.geoms:
+			out.extend(explode_lines(part))
+		return out
+	return []
+
+
+def make_direction_index(gdf, source_name, search_m, id_keys):
+	if gdf is None or len(gdf) == 0:
+		return None
+
+	gdf = gdf.reset_index(drop=True)
+	return {
+		'gdf': gdf,
+		'sindex': gdf.sindex,
+		'source_name': source_name,
+		'search_m': float(search_m),
+		'id_keys': id_keys
+	}
+
+
+def choose_direction(geom, centerline_index, street_index, config):
+	if centerline_index is not None:
+		match = nearest_direction(geom, centerline_index, config)
+		if match is not None:
+			return match
+
+	if street_index is not None:
+		match = nearest_direction(geom, street_index, config)
+		if match is not None:
+			return match
+
+	return fallback_direction(geom)
+
+
+def nearest_direction(geom, direction_index, config):
+	search_geom = geom.buffer(direction_index['search_m'])
+	candidate_indices = query_spatial_index(direction_index['sindex'], search_geom)
+	if len(candidate_indices) == 0:
+		return None
+
+	best = None
+	for raw_idx in candidate_indices:
+		idx = int(raw_idx)
+		row = direction_index['gdf'].iloc[idx]
+		line = row.geometry
+		distance = geom.distance(line)
+		if distance > direction_index['search_m']:
+			continue
+
+		angle = line_direction_near(line, geom, config['direction']['tangent_delta_m'])
+		if angle is None:
+			continue
+
+		if best is None or distance < best['distance_m']:
+			best = {
+				'source': direction_index['source_name'],
+				'angle_rad': angle,
+				'distance_m': distance,
+				'source_id': direction_source_id(row_props(row), idx, direction_index['id_keys'])
+			}
+
+	return best
+
+
+def query_spatial_index(sindex, geom):
+	try:
+		return list(sindex.query(geom, predicate='intersects'))
+	except TypeError:
+		return list(sindex.query(geom))
+
+
+def line_direction_near(line, geom, delta):
+	if line.length <= 0:
+		return None
+
+	_, point_on_line = nearest_points(geom.representative_point(), line)
+	s = line.project(point_on_line)
+	tangent = tangent_at(line, s, delta)
+	if tangent is None:
+		return None
+
+	return normalize_axis_angle(math.atan2(tangent[1], tangent[0]))
+
+
+def tangent_at(line, s, delta):
+	length = line.length
+	if length <= 0:
+		return None
+
+	a = max(0.0, s - delta)
+	b = min(length, s + delta)
+	if b - a <= 1e-9:
+		a = 0.0
+		b = length
+	if b - a <= 1e-9:
+		return None
+
+	pa = line.interpolate(a)
+	pb = line.interpolate(b)
+	dx = pb.x - pa.x
+	dy = pb.y - pa.y
+	n = math.hypot(dx, dy)
+	if n <= 1e-12:
+		return None
+
+	return (dx / n, dy / n)
+
+
+def fallback_direction(geom):
+	angle = minimum_rectangle_axis_angle(geom)
+	if angle is not None:
+		return {
+			'source': 'polygon_axis',
+			'angle_rad': angle,
+			'distance_m': 0.0,
+			'source_id': None
+		}
+
+	angle = longest_edge_angle(geom)
+	if angle is None:
+		angle = 0.0
+
+	return {
+		'source': 'longest_edge',
+		'angle_rad': angle,
+		'distance_m': 0.0,
+		'source_id': None
+	}
+
+
+def minimum_rectangle_axis_angle(geom):
+	try:
+		rect = geom.minimum_rotated_rectangle
+	except Exception:
+		return None
+
+	if rect is None or rect.is_empty:
+		return None
+
+	if isinstance(rect, LineString):
+		return line_angle(rect)
+
+	if rect.geom_type != 'Polygon':
+		return None
+
+	best = None
+	for a, b in pairwise(list(rect.exterior.coords)):
+		length = math.hypot(b[0] - a[0], b[1] - a[1])
+		if length <= 1e-9:
+			continue
+		if best is None or length > best[0]:
+			best = (length, math.atan2(b[1] - a[1], b[0] - a[0]))
+
+	if best is None:
+		return None
+
+	return normalize_axis_angle(best[1])
+
+
+def longest_edge_angle(geom):
+	best = None
+	for poly in iter_polygons(geom):
+		for a, b in pairwise(list(poly.exterior.coords)):
+			length = math.hypot(b[0] - a[0], b[1] - a[1])
+			if length <= 1e-9:
+				continue
+			if best is None or length > best[0]:
+				best = (length, math.atan2(b[1] - a[1], b[0] - a[0]))
+
+	if best is None:
+		return None
+
+	return normalize_axis_angle(best[1])
+
+
+def line_angle(line):
+	coords = list(line.coords)
+	if len(coords) < 2:
+		return None
+	a = coords[0]
+	b = coords[-1]
+	if math.hypot(b[0] - a[0], b[1] - a[1]) <= 1e-9:
+		return None
+	return normalize_axis_angle(math.atan2(b[1] - a[1], b[0] - a[0]))
+
+
+def directional_width(coords, direction_angle_rad):
+	normal_angle = direction_angle_rad + math.pi / 2
+	nx = math.cos(normal_angle)
+	ny = math.sin(normal_angle)
+
+	min_projection = math.inf
+	max_projection = -math.inf
+
+	for coord in coords:
+		x = float(coord[0])
+		y = float(coord[1])
+		projection = x * nx + y * ny
+		if projection < min_projection:
+			min_projection = projection
+		if projection > max_projection:
+			max_projection = projection
+
+	return max_projection - min_projection
+
+
+def normalize_axis_angle(angle):
+	angle = angle % math.pi
+	if angle < 0:
+		angle += math.pi
+	return angle
+
+
+def polygon_coords(geom):
+	coords = []
+	for poly in iter_polygons(geom):
+		coords.extend(list(poly.exterior.coords))
+	if not coords:
+		raise ValueError('polygon has no coordinates')
+	return coords
+
+
+def iter_polygons(geom):
+	if geom is None or geom.is_empty:
+		return
+	if geom.geom_type == 'Polygon':
+		yield geom
+	elif geom.geom_type == 'MultiPolygon':
+		for part in geom.geoms:
+			yield part
+	elif hasattr(geom, 'geoms'):
+		for part in geom.geoms:
+			yield from iter_polygons(part)
+
+
+def pairwise(coords):
+	for i in range(len(coords) - 1):
+		yield coords[i], coords[i + 1]
+
+
+def width_class(width, classes):
+	for cls in classes:
+		min_v = cls.get('min')
+		max_v = cls.get('max')
+		if (min_v is None or width >= min_v) and (max_v is None or width < max_v):
+			return cls['id']
+	return None
+
+
+def source_feature_id(props, fallback):
+	for key in ('SIS_ID', 'OBJECTID', 'ID', 'fid', 'FID'):
+		value = props.get(key)
+		if value is not None:
+			return value
+	return fallback
+
+
+def direction_source_id(props, fallback, keys):
+	for key in keys:
+		value = props.get(key)
+		if value is not None:
+			part_index = props.get('part_index')
+			if part_index is not None and key in ('centerline_id', 'fmzk_id', 'FMZK_ID'):
+				return f"{value}:{part_index}"
+			return value
+	return fallback
+
+
+def row_props(row):
+	return {
+		key: json_value(value)
+		for key, value in row.drop(labels=['geometry']).to_dict().items()
+		if not key.startswith('_')
+	}
+
+
+def json_value(value):
+	if value is None:
+		return None
+
+	try:
+		if value != value:
+			return None
+	except Exception:
+		pass
+
+	if hasattr(value, 'item'):
+		try:
+			value = value.item()
+		except Exception:
+			pass
+
+	if isinstance(value, (str, bool, int)):
+		return value
+
+	if isinstance(value, float):
+		if not math.isfinite(value):
+			return None
+		return value
+
+	return str(value)
+
+
+def round_or_none(value, digits):
+	if value is None:
+		return None
+	return round(float(value), digits)
+
+
+def add_error(summary, exc):
+	key = type(exc).__name__
+	summary['errors'][key] = summary['errors'].get(key, 0) + 1
+
+
+def output_geodataframe(rows, crs):
+	if rows:
+		return gpd.GeoDataFrame(rows, geometry='geometry', crs=crs)
+
+	return gpd.GeoDataFrame(
+		columns=[
+			'method',
+			'width_m',
+			'width_class',
+			'direction_source',
+			'direction_angle_deg',
+			'direction_distance_m',
+			'source_type',
+			'source_id',
+			'geometry'
+		],
+		geometry='geometry',
+		crs=crs
+	)
+
+
+def write_geojsonseq_gdf(path, gdf):
+	Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+	with open(path, 'w', encoding='utf-8') as f:
+		for _, row in gdf.iterrows():
+			geom = row.geometry
+			if geom is None or geom.is_empty:
+				continue
+			props = {
+				key: json_value(row[key])
+				for key in gdf.columns
+				if key != 'geometry'
+			}
+			feature = {
+				'type': 'Feature',
+				'geometry': mapping(geom),
+				'properties': props
+			}
+			f.write(json.dumps(feature, ensure_ascii=False))
+			f.write('\n')
+
+
+if __name__ == '__main__':
+	main()
