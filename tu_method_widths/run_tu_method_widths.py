@@ -80,10 +80,13 @@ def main():
 			m2_point = None
 			add_error(summary, exc)
 
+		w1_m = round_or_none(w1, 2)
+		w2_m = round_or_none(w2, 2)
 		w_tu = w2
-		width_class_m1 = width_class(w1, config['width_classes']) if w1 is not None else None
-		width_class_m2 = width_class(w2, config['width_classes']) if w2 is not None else None
-		width_class_tu = width_class_m2
+		w_tu_m = round_or_none(w_tu, 2)
+		width_class_m1 = width_class(w1_m, config['width_classes']) if w1_m is not None else None
+		width_class_m2 = width_class(w2_m, config['width_classes']) if w2_m is not None else None
+		width_class_tu = width_class(w_tu_m, config['width_classes']) if w_tu_m is not None else None
 		
 		if w1 is not None and w2 is not None:
 			m1_m2_diff_m = abs(w1 - w2)
@@ -118,13 +121,13 @@ def main():
 				'd_c': round_or_none(d_c, 2),
 				'd_i': round_or_none(d_i, 2),
 				
-				'w_m1': round_or_none(w1, 2),
-				'w_m2': round_or_none(w2, 2),
+				'w_m1': w1_m,
+				'w_m2': w2_m,
 				
 				'width_class_m1': width_class_m1,
 				'width_class_m2': width_class_m2,
 				
-				'w_tu': round_or_none(w_tu, 2),
+				'w_tu': w_tu_m,
 				'width_class_tu': width_class_tu,
 				'tu_method': 'm2',
 				
@@ -251,6 +254,8 @@ def build_method_3_street_axis_features(sis, config, work_dir, summary):
 
 		props = row.drop(labels=['geometry']).to_dict()
 
+		w3_m = round(w3, 2)
+
 		features.append({
 			'type': 'Feature',
 			'geometry': geom.__geo_interface__,
@@ -263,8 +268,8 @@ def build_method_3_street_axis_features(sis, config, work_dir, summary):
 				'axis_length_m': round(length_m, 2),
 				'buffer_m': round(buffer_m, 2),
 				'area_sidewalk_m2': round(area_sidewalk_m2, 2),
-				'w_m3': round(w3, 2),
-				'width_class_m3': width_class(w3, config['width_classes']),
+				'w_m3': w3_m,
+				'width_class_m3': width_class(w3_m, config['width_classes']),
 				'method': config['method']
 			}
 		})

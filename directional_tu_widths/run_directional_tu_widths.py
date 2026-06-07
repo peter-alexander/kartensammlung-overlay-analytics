@@ -93,7 +93,8 @@ def main():
 			polygon_axis_angle = minimum_rectangle_axis_angle(geom)
 			direction = choose_direction(geom, centerline_index, street_index, config, polygon_axis_angle)
 			coords = polygon_coords(geom)
-			width_m = directional_width(coords, direction['angle_rad'])
+			width_raw_m = directional_width(coords, direction['angle_rad'])
+			width_m = round(width_raw_m, 2)
 			width_cls = width_class(width_m, config['width_classes'])
 		except Exception as exc:
 			summary['skipped'] += 1
@@ -117,7 +118,7 @@ def main():
 			'area_m2': round(area_m2, 2),
 			'perimeter_m': round(perimeter_m, 2),
 			'polygon_axis_angle_deg': angle_deg_or_none(polygon_axis_angle, 2),
-			'width_m': round(width_m, 2),
+			'width_m': width_m,
 			'width_class': width_cls,
 			'direction_source': direction['source'],
 			'direction_angle_deg': round(math.degrees(direction['angle_rad']), 2),

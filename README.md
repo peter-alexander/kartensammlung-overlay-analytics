@@ -18,10 +18,10 @@ Die Pipeline verwendet FMZK-Gehsteigflächen als Richtungs- und Strukturquelle u
 ## Breitenklassen
 
 - `0`: `< 1.2 m`
-- `1`: `1.2 m – 1.5 m`
-- `2`: `1.5 m – 2.0 m`
-- `3`: `2.0 m – 3.0 m`
-- `4`: `> 3.0 m`
+- `1`: `>= 1.2 m - < 1.5 m`
+- `2`: `>= 1.5 m - < 2.0 m`
+- `3`: `>= 2.0 m - < 3.0 m`
+- `4`: `>= 3.0 m`
 
 ## Lokaler Start
 

@@ -4,10 +4,10 @@ const WORK_DIR = 'work/sidewalk-widths';
 
 const WIDTH_CLASSES = [
 	{ id: 0, label: '< 1.2 m', min: null, max: 1.2 },
-	{ id: 1, label: '1.2 m - 1.5 m', min: 1.2, max: 1.5 },
-	{ id: 2, label: '1.5 m - 2.0 m', min: 1.5, max: 2.0 },
-	{ id: 3, label: '2.0 m - 3.0 m', min: 2.0, max: 3.0 },
-	{ id: 4, label: '> 3.0 m', min: 3.0, max: null }
+	{ id: 1, label: '>= 1.2 m - < 1.5 m', min: 1.2, max: 1.5 },
+	{ id: 2, label: '>= 1.5 m - < 2.0 m', min: 1.5, max: 2.0 },
+	{ id: 3, label: '>= 2.0 m - < 3.0 m', min: 2.0, max: 3.0 },
+	{ id: 4, label: '>= 3.0 m', min: 3.0, max: null }
 ];
 
 export default {

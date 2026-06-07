@@ -300,7 +300,7 @@ def measure_line(line, sis_union, fmzk_id, part_index, config):
 			if segments:
 				seg = segments[0]
 				mid = seg.interpolate(0.5, normalized=True)
-				width = seg.length
+				width = round(seg.length, 2)
 				out_point, source = choose_output_point(p, mid, seg, config)
 				if source == 'centerline':
 					output_points_centerline += 1
