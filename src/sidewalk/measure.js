@@ -98,8 +98,9 @@ function measureStation({ station, sisCandidates, config }) {
 
 	const measured = [];
 	for (const interval of intervals) {
-		const widthM = (interval.t1 - interval.t0) * lineLen;
-		if (widthM < cfg.minWidthM) continue;
+		const widthRawM = (interval.t1 - interval.t0) * lineLen;
+		if (widthRawM < cfg.minWidthM) continue;
+		const widthM = round(widthRawM, 2);
 
 		const midT = (interval.t0 + interval.t1) * 0.5;
 		const mid = lerp(lineA, lineB, midT);
