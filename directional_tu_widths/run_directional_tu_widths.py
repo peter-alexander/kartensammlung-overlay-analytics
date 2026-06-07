@@ -71,6 +71,9 @@ def main():
 		'direction_longest_edge': 0,
 		'width_below_min': 0,
 		'width_above_max': 0,
+		'width_method_counts': width_method_count_summary(),
+		'rect_snap_used': 0,
+		'directional_projection_used': 0,
 		'width_below_min_by_source': source_count_summary(),
 		'width_above_max_by_source': source_count_summary(),
 		'errors': {}
@@ -90,10 +93,11 @@ def main():
 		try:
 			area_m2 = float(geom.area)
 			perimeter_m = float(geom.length)
-			polygon_axis_angle = minimum_rectangle_axis_angle(geom)
+			rect_metrics = minimum_rectangle_metrics(geom)
+			polygon_axis_angle = rect_metrics.get('long_angle_rad')
 			direction = choose_direction(geom, centerline_index, street_index, config, polygon_axis_angle)
-			coords = polygon_coords(geom)
-			width_raw_m = directional_width(coords, direction['angle_rad'])
+			measurement = measure_width(geom, direction['angle_rad'], rect_metrics, config)
+			width_raw_m = measurement['width_raw_m']
 			width_m = round(width_raw_m, 2)
 			width_cls = width_class(width_m, config['width_classes'])
 		except Exception as exc:
@@ -112,14 +116,28 @@ def main():
 		if summary_key in summary:
 			summary[summary_key] += 1
 
+		increment_source_count(summary['width_method_counts'], measurement['width_method'])
+		if measurement['width_method'].startswith('rect_snap_'):
+			summary['rect_snap_used'] += 1
+		else:
+			summary['directional_projection_used'] += 1
+
 		rows.append({
 			'geometry': geom,
 			'method': config['method'],
 			'area_m2': round(area_m2, 2),
 			'perimeter_m': round(perimeter_m, 2),
 			'polygon_axis_angle_deg': angle_deg_or_none(polygon_axis_angle, 2),
+			'width_raw_m': round(width_raw_m, 4),
 			'width_m': width_m,
 			'width_class': width_cls,
+			'width_method': measurement['width_method'],
+			'rect_long_m': round_or_none(rect_metrics.get('long_m'), 2),
+			'rect_short_m': round_or_none(rect_metrics.get('short_m'), 2),
+			'rectangularity': round_or_none(rect_metrics.get('rectangularity'), 4),
+			'rect_long_angle_deg': angle_deg_or_none(rect_metrics.get('long_angle_rad'), 2),
+			'rect_short_angle_deg': angle_deg_or_none(rect_metrics.get('short_angle_rad'), 2),
+			'rect_angle_diff_deg': round_or_none(measurement.get('rect_angle_diff_deg'), 2),
 			'direction_source': direction['source'],
 			'direction_angle_deg': round(math.degrees(direction['angle_rad']), 2),
 			'direction_distance_m': round_or_none(direction['distance_m'], 2),
@@ -152,6 +170,9 @@ def normalize_config(config):
 	config['direction'].setdefault('min_width_m', 0.2)
 	config['direction'].setdefault('max_width_m', 8.0)
 	config['direction'].setdefault('tangent_delta_m', 2.0)
+	config['direction'].setdefault('rect_snap_enabled', True)
+	config['direction'].setdefault('rect_snap_min_rectangularity', 0.85)
+	config['direction'].setdefault('rect_snap_angle_tolerance_deg', 15.0)
 
 	config['paths'].setdefault('surfaces_wgs84', 'work/directional-tu-widths/directional_surfaces_4326.geojsonseq')
 	return config
@@ -515,6 +536,106 @@ def directional_width(coords, direction_angle_rad):
 	return max_projection - min_projection
 
 
+def measure_width(geom, direction_angle_rad, rect_metrics, config):
+	coords = polygon_coords(geom)
+	fallback = {
+		'width_raw_m': directional_width(coords, direction_angle_rad),
+		'width_method': 'directional_projection',
+		'rect_angle_diff_deg': rect_angle_diff_deg(direction_angle_rad, rect_metrics)
+	}
+
+	direction_cfg = config['direction']
+	if not direction_cfg.get('rect_snap_enabled', True):
+		return fallback
+	if rect_metrics.get('rectangularity') is None:
+		return fallback
+	if rect_metrics['rectangularity'] < float(direction_cfg['rect_snap_min_rectangularity']):
+		return fallback
+	if rect_metrics.get('long_angle_rad') is None or rect_metrics.get('short_angle_rad') is None:
+		return fallback
+
+	diff_long = axis_angle_diff_deg(direction_angle_rad, rect_metrics['long_angle_rad'])
+	diff_short = axis_angle_diff_deg(direction_angle_rad, rect_metrics['short_angle_rad'])
+	tolerance = float(direction_cfg['rect_snap_angle_tolerance_deg'])
+	if min(diff_long, diff_short) > tolerance:
+		return fallback
+
+	if diff_long <= diff_short:
+		return {
+			'width_raw_m': rect_metrics['short_m'],
+			'width_method': 'rect_snap_short',
+			'rect_angle_diff_deg': diff_long
+		}
+
+	return {
+		'width_raw_m': rect_metrics['long_m'],
+		'width_method': 'rect_snap_long',
+		'rect_angle_diff_deg': diff_short
+	}
+
+
+def minimum_rectangle_metrics(geom):
+	metrics = {
+		'long_m': None,
+		'short_m': None,
+		'long_angle_rad': None,
+		'short_angle_rad': None,
+		'rectangularity': None
+	}
+
+	try:
+		rect = geom.minimum_rotated_rectangle
+	except Exception:
+		return metrics
+
+	if rect is None or rect.is_empty:
+		return metrics
+
+	if isinstance(rect, LineString):
+		angle = line_angle(rect)
+		metrics['long_m'] = rect.length
+		metrics['short_m'] = 0.0
+		metrics['long_angle_rad'] = angle
+		if angle is not None:
+			metrics['short_angle_rad'] = normalize_axis_angle(angle + math.pi / 2)
+		return metrics
+
+	if rect.geom_type != 'Polygon' or rect.area <= 1e-12:
+		return metrics
+
+	edges = []
+	for a, b in pairwise(list(rect.exterior.coords)):
+		dx = b[0] - a[0]
+		dy = b[1] - a[1]
+		length = math.hypot(dx, dy)
+		if length <= 1e-9:
+			continue
+		edges.append((length, normalize_axis_angle(math.atan2(dy, dx))))
+
+	if not edges:
+		return metrics
+
+	long_edge = max(edges, key=lambda item: item[0])
+	short_edge = min(edges, key=lambda item: item[0])
+	metrics['long_m'] = long_edge[0]
+	metrics['short_m'] = short_edge[0]
+	metrics['long_angle_rad'] = long_edge[1]
+	metrics['short_angle_rad'] = short_edge[1]
+	metrics['rectangularity'] = float(geom.area) / float(rect.area)
+	return metrics
+
+
+def rect_angle_diff_deg(direction_angle_rad, rect_metrics):
+	diffs = []
+	if rect_metrics.get('long_angle_rad') is not None:
+		diffs.append(axis_angle_diff_deg(direction_angle_rad, rect_metrics['long_angle_rad']))
+	if rect_metrics.get('short_angle_rad') is not None:
+		diffs.append(axis_angle_diff_deg(direction_angle_rad, rect_metrics['short_angle_rad']))
+	if not diffs:
+		return None
+	return min(diffs)
+
+
 def normalize_axis_angle(angle):
 	angle = angle % math.pi
 	if angle < 0:
@@ -577,6 +698,14 @@ def source_count_summary():
 		'street_axis': 0,
 		'polygon_axis': 0,
 		'longest_edge': 0
+	}
+
+
+def width_method_count_summary():
+	return {
+		'directional_projection': 0,
+		'rect_snap_short': 0,
+		'rect_snap_long': 0
 	}
 
 
@@ -659,8 +788,16 @@ def output_geodataframe(rows, crs):
 			'area_m2',
 			'perimeter_m',
 			'polygon_axis_angle_deg',
+			'width_raw_m',
 			'width_m',
 			'width_class',
+			'width_method',
+			'rect_long_m',
+			'rect_short_m',
+			'rectangularity',
+			'rect_long_angle_deg',
+			'rect_short_angle_deg',
+			'rect_angle_diff_deg',
 			'direction_source',
 			'direction_angle_deg',
 			'direction_distance_m',

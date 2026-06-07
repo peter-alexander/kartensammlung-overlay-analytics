@@ -90,6 +90,9 @@
 		"max_width_m": 8.0,
 		"min_width_m": 0.2,
 		"tangent_delta_m": 2.0,
+		"rect_snap_enabled": true,
+		"rect_snap_min_rectangularity": 0.85,
+		"rect_snap_angle_tolerance_deg": 15.0,
 		"use_directional_width": true
 	},
 	"width_classes": [
