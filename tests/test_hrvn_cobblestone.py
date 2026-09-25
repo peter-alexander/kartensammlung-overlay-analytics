@@ -2,7 +2,8 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-from shapely.geometry import box
+import geopandas as gpd
+from shapely.geometry import LineString, box
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / 'hrvn_cobblestone' / 'run_hrvn_cobblestone.py'
@@ -38,6 +39,20 @@ class HrvnCobblestoneTests(unittest.TestCase):
 			</xsd:complexType>
 		</xsd:schema>'''
 		self.assertEqual(runner.geometry_property_from_xsd(xml), 'SHAPE')
+
+	def test_clip_hrvn_to_cobblestone_uses_unbuffered_lines(self):
+		hrvn = gpd.GeoDataFrame(
+			[
+				{'M18_RANG_SUB': 'B', 'geometry': LineString([(-5, 5), (15, 5)])},
+				{'M18_RANG_SUB': 'G', 'geometry': LineString([(-5, 20), (15, 20)])}
+			],
+			geometry='geometry',
+			crs='EPSG:31256'
+		)
+		result = runner.clip_hrvn_to_cobblestone(hrvn, box(0, 0, 10, 10), 'M18_RANG_SUB')
+		self.assertEqual(len(result), 1)
+		self.assertEqual(result.iloc[0]['rank'], 'B')
+		self.assertAlmostEqual(result.iloc[0]['length_m'], 10.0)
 
 	def test_simplify_preserves_polygonal_geometry(self):
 		geom = box(0, 0, 10, 10)
