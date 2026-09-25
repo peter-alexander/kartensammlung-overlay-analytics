@@ -34,6 +34,6 @@ def run(label, extra):
 		print(json.dumps(feature.get("properties", {}), ensure_ascii=False, sort_keys=True))
 
 run("BBOX only", {"BBOX": BBOX})
-run("TYPE GM/GO/KL only", {"cql_filter": "TYPE IN ('GM','GO','KL')"})
+run("BELAG GM/GO only", {"cql_filter": "BELAG IN ('GM','GO')"})
 run("CQL spatial only", {"cql_filter": "BBOX(SHAPE,0,340000,2000,342000,'EPSG:31256')"})
-run("CQL spatial + TYPE", {"cql_filter": "BBOX(SHAPE,0,340000,2000,342000,'EPSG:31256') AND TYPE IN ('GM','GO','KL')"})
+run("CQL spatial + BELAG", {"cql_filter": "BBOX(SHAPE,0,340000,2000,342000,'EPSG:31256') AND BELAG IN ('GM','GO')"})
