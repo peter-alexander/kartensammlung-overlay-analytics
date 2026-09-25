@@ -27,6 +27,18 @@ class HrvnCobblestoneTests(unittest.TestCase):
 		self.assertEqual(len(geometries), 1)
 		self.assertAlmostEqual(geometries[0].area, 100.0)
 
+	def test_geometry_property_from_xsd(self):
+		xml = b'''<?xml version="1.0"?>
+		<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gml="http://www.opengis.net/gml">
+			<xsd:complexType name="SISBELAGOGDType">
+				<xsd:sequence>
+					<xsd:element name="TYPE" type="xsd:string"/>
+					<xsd:element name="SHAPE" type="gml:MultiSurfacePropertyType"/>
+				</xsd:sequence>
+			</xsd:complexType>
+		</xsd:schema>'''
+		self.assertEqual(runner.geometry_property_from_xsd(xml), 'SHAPE')
+
 	def test_simplify_preserves_polygonal_geometry(self):
 		geom = box(0, 0, 10, 10)
 		result = runner.simplify_polygonal(geom, 0.2)
