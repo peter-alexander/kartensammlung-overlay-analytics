@@ -23,7 +23,8 @@ Als gesuchtes Kopfsteinpflaster gelten die SIS-Belagsarten:
 5. Die Flächen jeder Kachel an der Kachelgrenze schneiden und vereinigen; dadurch entstehen an Kachelgrenzen keine doppelten Flächen.
 6. Alle geladenen Kopfsteinpflasterflächen vereinigen.
 7. Die Gesamtfläche mit dem HRVN-Korridor verschneiden.
-8. Debug- und Ergebnisgeometrien topologieerhaltend vereinfachen und nach EPSG:4326 schreiben.
+8. Zusätzlich die zusammengeführten GM/GO-Flächen mit dem ungepufferten HRVN schneiden. Dadurch entsteht ein Linienlayer nur auf den tatsächlichen B/G/E-Trassen.
+9. Debug- und Ergebnisgeometrien topologieerhaltend vereinfachen und nach EPSG:4326 schreiben.
 
 Die Stadt Wien empfiehlt für SIS ausdrücklich kleine WFS-Ausschnitte, beispielsweise 2×2 km. Deshalb wird kein Wien-Gesamtdownload verwendet.
 
@@ -50,6 +51,7 @@ Für einen kurzen technischen Test können nur die ersten Kacheln verarbeitet we
 - dist/hrvn-cobblestone/debug_sis_cobblestone_merged.geojson – alle in den SIS-Kacheln gefundenen und zusammengeführten Kopfsteinpflasterflächen vor dem HRVN-Schnitt
 - dist/hrvn-cobblestone/debug_sis_cobblestone_merged.fgb – derselbe Debug-Datensatz als FlatGeobuf
 - dist/hrvn-cobblestone/debug_hrvn_corridor.geojson – verwendeter HRVN-Puffer
+- dist/hrvn-cobblestone/debug_sis_cobblestone_merged_hrvn_unbuffered.geojson – GM/GO-Flächen mit dem ungepufferten HRVN B/G/E verschnitten; Linienlayer ohne seitlichen Straßenpuffer
 - dist/hrvn-cobblestone/summary.json – Parameter, Flächenstatistik und Kachelstatistik
 
 ## Wichtige Parameter
@@ -62,3 +64,5 @@ In config/hrvn-cobblestone.json:
 - sources.sis.filter_property / filter_values: aktuell BELAG = GM, GO
 
 Der Debug-Datensatz umfasst den rechteckigen Gesamtbereich des gefilterten HRVN. Er wird bewusst vor dem HRVN-Schnitt geschrieben, damit sich fehlende oder fälschlich erfasste Pflasterflächen gegenüber dem Korridor kontrollieren lassen.
+
+Der ungepufferte Debug-Layer enthält pro Liniensegment `rank` (B/G/E) und `length_m` in Metern. Er eignet sich insbesondere, um Gehsteige, Parkspuren und andere seitlich zum HRVN liegende GM/GO-Flächen aus der Betrachtung auszuschließen.
