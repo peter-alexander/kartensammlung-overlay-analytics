@@ -81,6 +81,11 @@ def main():
 	debug_simplify_m = float(config['output'].get('debug_simplify_tolerance_m', simplify_m))
 	all_cobblestone_simplified = simplify_polygonal(all_cobblestone, debug_simplify_m)
 	hrvn_cobblestone_simplified = simplify_polygonal(hrvn_cobblestone, simplify_m)
+	unbuffered_hrvn_cobblestone = clip_hrvn_to_cobblestone(
+		hrvn,
+		all_cobblestone_simplified,
+		config['sources']['hrvn']['filter_property']
+	)
 
 	write_polygon_outputs(
 		all_cobblestone_simplified,
@@ -106,6 +111,14 @@ def main():
 		config['crs']['output'],
 		'hrvn_corridor'
 	)
+	write_line_output(
+		unbuffered_hrvn_cobblestone,
+		paths.get(
+			'debug_unbuffered_hrvn_geojson',
+			str(Path(paths['output_dir']) / 'debug_sis_cobblestone_merged_hrvn_unbuffered.geojson')
+		),
+		config['crs']['output']
+	)
 
 	summary = {
 		'hrvn_features': int(len(hrvn)),
@@ -117,6 +130,8 @@ def main():
 		'corridor_area_m2': round(float(corridor.area), 2),
 		'all_loaded_cobblestone_area_m2': area_or_zero(all_cobblestone_simplified),
 		'hrvn_cobblestone_area_m2': area_or_zero(hrvn_cobblestone_simplified),
+		'unbuffered_hrvn_cobblestone_features': int(len(unbuffered_hrvn_cobblestone)),
+		'unbuffered_hrvn_cobblestone_length_m': round(float(unbuffered_hrvn_cobblestone['length_m'].sum()), 2) if not unbuffered_hrvn_cobblestone.empty else 0.0,
 		'tiles': tile_stats
 	}
 	Path(paths['summary']).parent.mkdir(parents=True, exist_ok=True)
@@ -335,6 +350,87 @@ def clean_polygonal(geom):
 		if parts:
 			return make_valid(union_all(parts))
 	return None
+
+
+def clean_linear(geom):
+	if geom is None or geom.is_empty:
+		return None
+	if geom.geom_type in ('LineString', 'MultiLineString'):
+		return geom
+	if hasattr(geom, 'geoms'):
+		parts = []
+		for part in geom.geoms:
+			clean = clean_linear(part)
+			if clean is None or clean.is_empty:
+				continue
+			if clean.geom_type == 'MultiLineString':
+				parts.extend(list(clean.geoms))
+			else:
+				parts.append(clean)
+		if parts:
+			return union_all(parts)
+	return None
+
+
+def clip_hrvn_to_cobblestone(hrvn, cobblestone, rank_property):
+	rows = []
+	if cobblestone is None or cobblestone.is_empty:
+		return gpd.GeoDataFrame(
+			columns=['source_index', 'rank', 'length_m', 'geometry'],
+			geometry='geometry',
+			crs=hrvn.crs
+		)
+
+	for source_index, row in hrvn.iterrows():
+		geom = row.geometry
+		if geom is None or geom.is_empty:
+			continue
+		clipped = clean_linear(geom.intersection(cobblestone))
+		if clipped is None or clipped.is_empty:
+			continue
+		parts = list(clipped.geoms) if clipped.geom_type == 'MultiLineString' else [clipped]
+		for part in parts:
+			if part.is_empty or part.length <= 0:
+				continue
+			rows.append({
+				'source_index': int(source_index),
+				'rank': str(row.get(rank_property, '')),
+				'length_m': round(float(part.length), 2),
+				'geometry': part
+			})
+
+	if rows:
+		return gpd.GeoDataFrame(rows, geometry='geometry', crs=hrvn.crs)
+	return gpd.GeoDataFrame(
+		columns=['source_index', 'rank', 'length_m', 'geometry'],
+		geometry='geometry',
+		crs=hrvn.crs
+	)
+
+
+def write_line_output(gdf, path, output_crs):
+	out = gdf
+	if output_crs and str(output_crs) != str(gdf.crs):
+		out = gdf.to_crs(output_crs)
+
+	features = []
+	for _, row in out.iterrows():
+		features.append({
+			'type': 'Feature',
+			'geometry': mapping(row.geometry),
+			'properties': {
+				'source_index': int(row['source_index']),
+				'rank': str(row['rank']),
+				'length_m': float(row['length_m'])
+			}
+		})
+
+	path = Path(path)
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_text(
+		json.dumps({'type': 'FeatureCollection', 'features': features}, ensure_ascii=False, separators=(',', ':')),
+		encoding='utf-8'
+	)
 
 
 def simplify_polygonal(geom, tolerance_m):
