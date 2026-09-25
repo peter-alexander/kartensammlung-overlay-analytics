@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import geopandas as gpd
@@ -30,6 +31,8 @@ def main():
 	output_dir.mkdir(parents=True, exist_ok=True)
 
 	session = make_session(config['download'])
+	geometry_property = discover_geometry_property(session, config)
+	print(f'SIS geometry property: {geometry_property}')
 
 	hrvn_path = work_dir / 'hrvn.geojson'
 	download_file(session, config['sources']['hrvn']['url'], hrvn_path, refresh=args.refresh)
@@ -50,6 +53,7 @@ def main():
 			config=config,
 			tile=tile,
 			tile_path=tile_path,
+			geometry_property=geometry_property,
 			refresh=args.refresh
 		)
 		geometries = extract_cobblestone_geometries(features, config, tile)
@@ -204,7 +208,43 @@ def tile_id_for(tile):
 	return f'{int(round(minx))}_{int(round(miny))}_{int(round(maxx))}_{int(round(maxy))}'
 
 
-def load_or_download_sis_tile(session, config, tile, tile_path, refresh=False):
+def discover_geometry_property(session, config):
+	sis_cfg = config['sources']['sis']
+	explicit = sis_cfg.get('geometry_property')
+	if explicit:
+		return explicit
+
+	params = {
+		'service': 'WFS',
+		'version': sis_cfg.get('version', '1.1.0'),
+		'request': 'DescribeFeatureType',
+		'typeName': sis_cfg['type_name']
+	}
+	response = session.get(sis_cfg['base_url'], params=params, timeout=float(config['download'].get('timeout_s', 180)))
+	response.raise_for_status()
+	return geometry_property_from_xsd(response.content)
+
+
+def geometry_property_from_xsd(xml_content):
+	root = ET.fromstring(xml_content)
+	candidates = []
+	for element in root.iter():
+		if not str(element.tag).endswith('element'):
+			continue
+		name = element.attrib.get('name')
+		type_name = element.attrib.get('type', '')
+		if not name:
+			continue
+		type_lower = type_name.lower()
+		if 'gml:' in type_lower and any(token in type_lower for token in ('geometry', 'surface', 'polygon', 'curve', 'point', 'line')):
+			candidates.append(name)
+
+	if not candidates:
+		raise RuntimeError('DescribeFeatureType did not expose a GML geometry property')
+	return candidates[0]
+
+
+def load_or_download_sis_tile(session, config, tile, tile_path, geometry_property, refresh=False):
 	if tile_path.exists() and tile_path.stat().st_size > 0 and not refresh:
 		return load_geojson_features(tile_path), 'cache'
 
@@ -216,12 +256,17 @@ def load_or_download_sis_tile(session, config, tile, tile_path, refresh=False):
 		'request': 'GetFeature',
 		'typeName': sis_cfg['type_name'],
 		'srsName': config['crs']['metric'],
-		'outputFormat': sis_cfg.get('output_format', 'json'),
-		'BBOX': f'{fmt(minx)},{fmt(miny)},{fmt(maxx)},{fmt(maxy)},{config["crs"]["metric"]}'
+		'outputFormat': sis_cfg.get('output_format', 'json')
 	}
+	bbox_cql = (
+		f"BBOX({geometry_property},{fmt(minx)},{fmt(miny)},{fmt(maxx)},{fmt(maxy)},"
+		f"'{config['crs']['metric']}')"
+	)
 	if sis_cfg.get('server_filter', True):
 		values = ','.join(f"'{escape_cql(value)}'" for value in sis_cfg['filter_values'])
-		params['cql_filter'] = f'{sis_cfg["filter_property"]} IN ({values})'
+		params['cql_filter'] = f"{bbox_cql} AND {sis_cfg['filter_property']} IN ({values})"
+	else:
+		params['cql_filter'] = bbox_cql
 
 	response = session.get(sis_cfg['base_url'], params=params, timeout=float(config['download'].get('timeout_s', 180)))
 	response.raise_for_status()
