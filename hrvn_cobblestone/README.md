@@ -9,18 +9,17 @@ Diese Analyse findet SIS-Kopfsteinpflasterflächen im Korridor des Wiener Hauptr
 
 HRVN wird wie im Kartensammlungs-Overlay hrvn auf M18_RANG_SUB = B, G, E gefiltert.
 
-Als Kopfsteinpflaster gelten die SIS-Typen:
+Als gesuchtes Kopfsteinpflaster gelten die SIS-Belagsarten:
 
 - GM – Großsteinpflaster mit Fugenverguss
 - GO – Großsteinpflaster ohne Fugenverguss
-- KL – Kleinsteinpflaster
 
 ## Methode
 
 1. HRVN laden und auf B, G, E filtern.
 2. In EPSG:31256 einen konfigurierbaren Korridor um das Netz bilden. Standard: 15 m je Seite.
 3. Den HRVN-Gesamtbereich in maximal 2×2-km-Kacheln teilen.
-4. SIS je Kachel per WFS laden. cql_filter beschränkt die Serverantwort bereits auf GM, GO, KL.
+4. SIS je Kachel per WFS laden. cql_filter beschränkt die Serverantwort bereits auf BELAG = GM oder GO.
 5. Die Flächen jeder Kachel an der Kachelgrenze schneiden und vereinigen; dadurch entstehen an Kachelgrenzen keine doppelten Flächen.
 6. Alle geladenen Kopfsteinpflasterflächen vereinigen.
 7. Die Gesamtfläche mit dem HRVN-Korridor verschneiden.
@@ -60,6 +59,6 @@ In config/hrvn-cobblestone.json:
 - analysis.buffer_m: Straßenkorridor je Seite; Standard 15 m
 - download.tile_size_m: SIS-Kachelgröße; Standard 2000 m
 - output.simplify_tolerance_m: Vereinfachung des Endergebnisses; Standard 0,2 m
-- sources.sis.filter_values: aktuell GM, GO, KL
+- sources.sis.filter_property / filter_values: aktuell BELAG = GM, GO
 
 Der Debug-Datensatz umfasst den rechteckigen Gesamtbereich des gefilterten HRVN. Er wird bewusst vor dem HRVN-Schnitt geschrieben, damit sich fehlende oder fälschlich erfasste Pflasterflächen gegenüber dem Korridor kontrollieren lassen.
