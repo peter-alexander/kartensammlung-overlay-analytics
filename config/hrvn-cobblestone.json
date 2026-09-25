@@ -25,8 +25,8 @@
 			"version": "1.1.0",
 			"type_name": "ogdwien:SISBELAGOGD",
 			"output_format": "json",
-			"filter_property": "TYPE",
-			"filter_values": ["GM", "GO", "KL"],
+			"filter_property": "BELAG",
+			"filter_values": ["GM", "GO"],
 			"server_filter": true
 		}
 	},
