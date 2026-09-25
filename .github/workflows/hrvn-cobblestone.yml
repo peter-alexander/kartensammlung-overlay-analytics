@@ -1,0 +1,56 @@
+name: HRVN cobblestone analysis
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/hrvn-cobblestone.yml"
+      - "config/hrvn-cobblestone.json"
+      - "hrvn_cobblestone/**"
+      - "tests/test_hrvn_cobblestone.py"
+      - "requirements-hrvn-cobblestone.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-hrvn-cobblestone.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-hrvn-cobblestone.txt
+
+      - name: Run unit tests
+        run: python -m unittest tests/test_hrvn_cobblestone.py
+
+      - name: Run full Vienna analysis
+        run: python hrvn_cobblestone/run_hrvn_cobblestone.py
+
+      - name: Show summary
+        if: always()
+        run: |
+          if [ -f dist/hrvn-cobblestone/summary.json ]; then
+            cat dist/hrvn-cobblestone/summary.json
+          fi
+
+      - name: Upload outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrvn-cobblestone
+          path: |
+            dist/hrvn-cobblestone/
+          if-no-files-found: warn
+          retention-days: 30
