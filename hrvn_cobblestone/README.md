@@ -24,7 +24,8 @@ Als gesuchtes Kopfsteinpflaster gelten die SIS-Belagsarten:
 6. Alle geladenen Kopfsteinpflasterflächen vereinigen.
 7. Die Gesamtfläche mit dem HRVN-Korridor verschneiden.
 8. Zusätzlich die zusammengeführten GM/GO-Flächen mit dem ungepufferten HRVN schneiden. Dadurch entsteht ein Linienlayer nur auf den tatsächlichen B/G/E-Trassen.
-9. Debug- und Ergebnisgeometrien topologieerhaltend vereinfachen und nach EPSG:4326 schreiben.
+9. Zusätzlich jene vollständigen GM/GO-Polygonkomponenten auswählen, durch die das ungepufferte HRVN mit positiver Schnittlänge verläuft.
+10. Debug- und Ergebnisgeometrien topologieerhaltend vereinfachen und nach EPSG:4326 schreiben.
 
 Die Stadt Wien empfiehlt für SIS ausdrücklich kleine WFS-Ausschnitte, beispielsweise 2×2 km. Deshalb wird kein Wien-Gesamtdownload verwendet.
 
@@ -52,6 +53,7 @@ Für einen kurzen technischen Test können nur die ersten Kacheln verarbeitet we
 - dist/hrvn-cobblestone/debug_sis_cobblestone_merged.fgb – derselbe Debug-Datensatz als FlatGeobuf
 - dist/hrvn-cobblestone/debug_hrvn_corridor.geojson – verwendeter HRVN-Puffer
 - dist/hrvn-cobblestone/debug_sis_cobblestone_merged_hrvn_unbuffered.geojson – GM/GO-Flächen mit dem ungepufferten HRVN B/G/E verschnitten; Linienlayer ohne seitlichen Straßenpuffer
+- dist/hrvn-cobblestone/debug_sis_cobblestone_merged_hrvn_unbuffered_polygons.geojson – vollständige GM/GO-Polygonkomponenten, durch die das ungepufferte HRVN B/G/E tatsächlich verläuft
 - dist/hrvn-cobblestone/summary.json – Parameter, Flächenstatistik und Kachelstatistik
 
 ## Wichtige Parameter
@@ -65,4 +67,4 @@ In config/hrvn-cobblestone.json:
 
 Der Debug-Datensatz umfasst den rechteckigen Gesamtbereich des gefilterten HRVN. Er wird bewusst vor dem HRVN-Schnitt geschrieben, damit sich fehlende oder fälschlich erfasste Pflasterflächen gegenüber dem Korridor kontrollieren lassen.
 
-Der ungepufferte Debug-Layer enthält pro Liniensegment `rank` (B/G/E) und `length_m` in Metern. Er eignet sich insbesondere, um Gehsteige, Parkspuren und andere seitlich zum HRVN liegende GM/GO-Flächen aus der Betrachtung auszuschließen.
+Der ungepufferte Linien-Debug-Layer enthält pro Liniensegment `rank` (B/G/E) und `length_m` in Metern. Der zusätzliche Polygonlayer enthält nur Polygonkomponenten mit positiver HRVN-Schnittlänge; bloßes Berühren an einem Punkt reicht nicht. Pro Polygon werden `area_m2`, `hrvn_length_m` und `ranks` gespeichert.

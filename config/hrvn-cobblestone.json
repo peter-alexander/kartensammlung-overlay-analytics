@@ -13,6 +13,7 @@
 		"debug_all_cobblestone_fgb": "dist/hrvn-cobblestone/debug_sis_cobblestone_merged.fgb",
 		"debug_hrvn_corridor_geojson": "dist/hrvn-cobblestone/debug_hrvn_corridor.geojson",
 		"debug_unbuffered_hrvn_geojson": "dist/hrvn-cobblestone/debug_sis_cobblestone_merged_hrvn_unbuffered.geojson",
+		"debug_unbuffered_hrvn_polygons_geojson": "dist/hrvn-cobblestone/debug_sis_cobblestone_merged_hrvn_unbuffered_polygons.geojson",
 		"summary": "dist/hrvn-cobblestone/summary.json"
 	},
 	"sources": {

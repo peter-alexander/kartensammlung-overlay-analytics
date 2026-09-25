@@ -86,6 +86,12 @@ def main():
 		all_cobblestone_simplified,
 		config['sources']['hrvn']['filter_property']
 	)
+	unbuffered_hrvn_cobblestone_polygons = select_cobblestone_polygons_on_hrvn(
+		hrvn,
+		all_cobblestone,
+		config['sources']['hrvn']['filter_property'],
+		debug_simplify_m
+	)
 
 	write_polygon_outputs(
 		all_cobblestone_simplified,
@@ -119,6 +125,14 @@ def main():
 		),
 		config['crs']['output']
 	)
+	write_selected_polygon_output(
+		unbuffered_hrvn_cobblestone_polygons,
+		paths.get(
+			'debug_unbuffered_hrvn_polygons_geojson',
+			str(Path(paths['output_dir']) / 'debug_sis_cobblestone_merged_hrvn_unbuffered_polygons.geojson')
+		),
+		config['crs']['output']
+	)
 
 	summary = {
 		'hrvn_features': int(len(hrvn)),
@@ -132,6 +146,8 @@ def main():
 		'hrvn_cobblestone_area_m2': area_or_zero(hrvn_cobblestone_simplified),
 		'unbuffered_hrvn_cobblestone_features': int(len(unbuffered_hrvn_cobblestone)),
 		'unbuffered_hrvn_cobblestone_length_m': round(float(unbuffered_hrvn_cobblestone['length_m'].sum()), 2) if not unbuffered_hrvn_cobblestone.empty else 0.0,
+		'unbuffered_hrvn_cobblestone_polygon_features': int(len(unbuffered_hrvn_cobblestone_polygons)),
+		'unbuffered_hrvn_cobblestone_polygon_area_m2': round(float(unbuffered_hrvn_cobblestone_polygons['area_m2'].sum()), 2) if not unbuffered_hrvn_cobblestone_polygons.empty else 0.0,
 		'tiles': tile_stats
 	}
 	Path(paths['summary']).parent.mkdir(parents=True, exist_ok=True)
@@ -405,6 +421,87 @@ def clip_hrvn_to_cobblestone(hrvn, cobblestone, rank_property):
 		columns=['source_index', 'rank', 'length_m', 'geometry'],
 		geometry='geometry',
 		crs=hrvn.crs
+	)
+
+
+def select_cobblestone_polygons_on_hrvn(hrvn, cobblestone, rank_property, simplify_tolerance_m=0.0):
+	columns = ['id', 'area_m2', 'hrvn_length_m', 'ranks', 'geometry']
+	if cobblestone is None or cobblestone.is_empty:
+		return gpd.GeoDataFrame(columns=columns, geometry='geometry', crs=hrvn.crs)
+
+	parts = list(cobblestone.geoms) if cobblestone.geom_type == 'MultiPolygon' else [cobblestone]
+	spatial_index = hrvn.sindex
+	rows = []
+
+	for polygon_id, polygon in enumerate(parts, start=1):
+		if polygon is None or polygon.is_empty:
+			continue
+
+		total_length_m = 0.0
+		ranks = set()
+		candidate_positions = spatial_index.query(polygon, predicate='intersects')
+
+		for position in candidate_positions:
+			row = hrvn.iloc[int(position)]
+			line = row.geometry
+			if line is None or line.is_empty:
+				continue
+			intersection = clean_linear(line.intersection(polygon))
+			if intersection is None or intersection.is_empty:
+				continue
+			length_m = float(intersection.length)
+			if length_m <= 0:
+				continue
+			total_length_m += length_m
+			ranks.add(str(row.get(rank_property, '')))
+
+		if total_length_m <= 0:
+			continue
+
+		output_polygon = polygon
+		if simplify_tolerance_m > 0:
+			output_polygon = clean_polygonal(
+				polygon.simplify(float(simplify_tolerance_m), preserve_topology=True)
+			)
+		if output_polygon is None or output_polygon.is_empty:
+			continue
+
+		rows.append({
+			'id': polygon_id,
+			'area_m2': round(float(output_polygon.area), 2),
+			'hrvn_length_m': round(total_length_m, 2),
+			'ranks': ','.join(sorted(rank for rank in ranks if rank)),
+			'geometry': output_polygon
+		})
+
+	if rows:
+		return gpd.GeoDataFrame(rows, geometry='geometry', crs=hrvn.crs)
+	return gpd.GeoDataFrame(columns=columns, geometry='geometry', crs=hrvn.crs)
+
+
+def write_selected_polygon_output(gdf, path, output_crs):
+	out = gdf
+	if output_crs and str(output_crs) != str(gdf.crs):
+		out = gdf.to_crs(output_crs)
+
+	features = []
+	for _, row in out.iterrows():
+		features.append({
+			'type': 'Feature',
+			'geometry': mapping(row.geometry),
+			'properties': {
+				'id': int(row['id']),
+				'area_m2': float(row['area_m2']),
+				'hrvn_length_m': float(row['hrvn_length_m']),
+				'ranks': str(row['ranks'])
+			}
+		})
+
+	path = Path(path)
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_text(
+		json.dumps({'type': 'FeatureCollection', 'features': features}, ensure_ascii=False, separators=(',', ':')),
+		encoding='utf-8'
 	)
 
 

@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 import geopandas as gpd
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString, MultiPolygon, box
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / 'hrvn_cobblestone' / 'run_hrvn_cobblestone.py'
@@ -53,6 +53,27 @@ class HrvnCobblestoneTests(unittest.TestCase):
 		self.assertEqual(len(result), 1)
 		self.assertEqual(result.iloc[0]['rank'], 'B')
 		self.assertAlmostEqual(result.iloc[0]['length_m'], 10.0)
+
+	def test_select_cobblestone_polygons_on_hrvn_keeps_crossed_polygons(self):
+		hrvn = gpd.GeoDataFrame(
+			[
+				{'M18_RANG_SUB': 'B', 'geometry': LineString([(-5, 5), (15, 5)])},
+				{'M18_RANG_SUB': 'G', 'geometry': LineString([(30, 10), (40, 20)])}
+			],
+			geometry='geometry',
+			crs='EPSG:31256'
+		)
+		cobblestone = MultiPolygon([box(0, 0, 10, 10), box(20, 0, 30, 10)])
+		result = runner.select_cobblestone_polygons_on_hrvn(
+			hrvn,
+			cobblestone,
+			'M18_RANG_SUB',
+			0.0
+		)
+		self.assertEqual(len(result), 1)
+		self.assertEqual(result.iloc[0]['ranks'], 'B')
+		self.assertAlmostEqual(result.iloc[0]['area_m2'], 100.0)
+		self.assertAlmostEqual(result.iloc[0]['hrvn_length_m'], 10.0)
 
 	def test_simplify_preserves_polygonal_geometry(self):
 		geom = box(0, 0, 10, 10)
