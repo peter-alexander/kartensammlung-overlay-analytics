@@ -35,6 +35,9 @@ jobs:
       - name: Run unit tests
         run: python -m unittest tests/test_hrvn_cobblestone.py
 
+      - name: Diagnose SIS WFS filters
+        run: python hrvn_cobblestone/diagnose_sis.py
+
       - name: Run full Vienna analysis
         run: python hrvn_cobblestone/run_hrvn_cobblestone.py
 
