@@ -111,7 +111,7 @@ def main():
 		'hrvn_features': int(len(hrvn)),
 		'hrvn_ranks': config['sources']['hrvn']['filter_values'],
 		'buffer_m_each_side': float(config['analysis']['buffer_m']),
-		'sis_types': config['sources']['sis']['filter_values'],
+		'sis_belags': config['sources']['sis']['filter_values'],
 		'tile_size_m': float(config['download']['tile_size_m']),
 		'tiles_processed': len(tiles),
 		'corridor_area_m2': round(float(corridor.area), 2),
