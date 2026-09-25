@@ -34,3 +34,10 @@ npm run build:sidewalk-widths -- --config config/sidewalk-widths.config.js
 
 Die finalen URLs sind in `config/sidewalk-widths.config.js` vorbereitet, aber auskommentiert.
 Aktiv sind Test-URLs für kleine vorbereitete Ausschnitte auf Lima-City.
+
+
+## Kopfsteinpflaster auf dem Hauptradverkehrsnetz
+
+Die Analyse unter hrvn_cobblestone/ verschneidet das Wiener Hauptradverkehrsnetz (B/G/E) mit den SIS-Kopfsteinpflastertypen GM, GO und KL. SIS wird entsprechend der Empfehlung der Stadt Wien kachelweise geladen und bereits serverseitig per CQL auf die relevanten Belagsarten eingeschränkt.
+
+Details, Parameter und Outputs: hrvn_cobblestone/README.md
